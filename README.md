@@ -33,7 +33,7 @@ Using mongo.dsl.CombinatorDsl
     }.toProcess
 
 ```
-Using native
+Using native query
 
 ```scala
     import mongo.query.Query.query
