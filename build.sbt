@@ -6,7 +6,7 @@ organization := "github.com/haghard"
 
 name := "mongo-query-streams"
 
-version := "0.1-SNAPSHOT"
+version := "0.1"
 
 scalaVersion := "2.11.5"
 
