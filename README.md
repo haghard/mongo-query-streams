@@ -11,6 +11,8 @@ Here's a basic example how to use it:
 
 ```scala
   import mongo.dsl.QueryDsl._
+
+  val Resource = mockDB()
       
   implicit val mongoExecutor =
       Executors.newFixedThreadPool(5, new NamedThreadFactory("mongo-worker"))
