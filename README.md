@@ -21,15 +21,14 @@ Here's a basic example how to use it:
   val nameTransducer = process1.lift({ obj: DBObject ⇒ obj.get("name").toString })
 
   val products = query { b ⇒
-    import b._
-    q(("article" $gt 2 $lt 40).q)
-    collection(PRODUCT)
-  }.source 
+    b.q("article" $gt 2 $lt 40)
+    b.collection(PRODUCT)
+  }.toProcess
 
   val p = for {
     dbObject <- Resource through (products |> nameTransducer).channel
     _ <- dbObject to sink
-    } yield ()
+  } yield ()
     
   p.runLog.run
 ```
