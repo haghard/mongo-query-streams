@@ -28,7 +28,7 @@ Using mongo.dsl.CombinatorDsl
     import mongo.dsl.CombinatorDsl._
     val q = Obj($and().op -> List(Obj("num" -> Obj(($gte(), 3), ($lt(), 10))), Obj("name" -> literal("Bauer"))))
     query { b ⇒
-      b.q(q)
+      b.q(q.toString)
       b.collection("tmp")
     }.toProcess
 
