@@ -2,16 +2,19 @@ package mongo.stream
 
 import java.util.Arrays._
 import java.util.Date
-import java.util.concurrent.Executors
-
+import java.util.concurrent.{ TimeUnit, ExecutorService, Executors }
+import mongo._
 import com.mongodb._
 import de.bwaldvogel.mongo.MongoServer
 import de.bwaldvogel.mongo.backend.memory.MemoryBackend
-import mongo.NamedThreadFactory
+import mongo.query.MongoProcess
+import mongo.{ MongoQuery, NamedThreadFactory }
 import org.apache.log4j.Logger
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ Buffer, ArrayBuffer }
+import scalaz.stream.Process._
+import scalaz.{ -\/, \/-, \/ }
 import scalaz.concurrent.Task
 import scalaz.stream.{ process1, Cause, io }
 
@@ -19,7 +22,7 @@ object MongoIntegrationEnv {
 
   private val logger = Logger.getLogger(this.getClass)
 
-  implicit val mongoExecutor = Executors.newFixedThreadPool(10, new NamedThreadFactory("mongo-worker"))
+  implicit val executor = Executors.newFixedThreadPool(10, new NamedThreadFactory("mongo-worker"))
 
   val articleIds = process1.lift({ obj: DBObject ⇒ obj.get("article").asInstanceOf[Int] })
 
@@ -78,19 +81,62 @@ object MongoIntegrationEnv {
     io.resource(Task.delay(prepareMockMongo()))(rs ⇒ Task.delay {
       rs._1.close
       rs._2.shutdownNow
-      logger debug s"mongo-client ${rs._1.##} has been closed"
+      logger.debug(s"mongo-client ${rs._1.##} has been closed")
     }) { rs ⇒
       var obtained = false
       Task.fork(
         Task.delay {
           if (!obtained) {
             val db = rs._1.getDB(DB_NAME)
-            logger debug s"Access mongo-client ${rs._1.##}"
+            logger.debug(s"Access mongo-client ${rs._1.##}")
             obtained = true
             db
           } else throw Cause.Terminated(Cause.End)
         }
       )(executor)
+    }
+  }
+
+  /**
+   * useful for test case
+   */
+  implicit object TestCaseScope extends MongoQuery[DB] {
+    override def toProcess(arg: String \/ QuerySetting)(implicit pool: ExecutorService): MongoProcess[DB, DBObject] = {
+      arg match {
+        case \/-(set) ⇒
+          MongoProcess {
+            eval(Task.now { db: DB ⇒
+              Task {
+                scalaz.stream.io.resource(
+                  Task delay {
+                    val collection = db.getCollection(set.collName)
+                    val cursor = collection.find(set.q)
+                    logger debug s"Cursor: ${cursor.##} Query: ${set.q} Sort: ${set.sortQuery}"
+                    set.sortQuery.foreach(cursor.sort(_))
+                    set.skip.foreach(cursor.skip(_))
+                    set.limit.foreach(cursor.limit(_))
+                    set.maxTimeMS.foreach(cursor.maxTime(_, TimeUnit.MILLISECONDS))
+                    cursor
+                  })(cursor ⇒ Task.delay(cursor.close)) { c ⇒
+                    Task.delay {
+                      if (c.hasNext) {
+                        c.next
+                      } else {
+                        logger.debug(s"Cursor: ${c.##} is exhausted")
+                        throw Cause.Terminated(Cause.End)
+                      }
+                    }
+                  }
+              }(pool)
+            })
+          }
+        case -\/(error) ⇒
+          MongoProcess {
+            eval(Task.now { db: DB ⇒
+              Task(eval(Task.delay[DBObject](throw new MongoException(error))))(pool)
+            })
+          }
+      }
     }
   }
 }

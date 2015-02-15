@@ -1,4 +1,4 @@
-package mongo.streams
+package mongo.query
 
 import scalaz.concurrent.Task
 import scalaz.stream.Process._

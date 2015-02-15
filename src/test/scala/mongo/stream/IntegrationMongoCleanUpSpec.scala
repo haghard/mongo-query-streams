@@ -1,50 +1,19 @@
 package mongo.stream
 
-import java.util.Date
-import mongo.dsl.QueryDsl._
-import mongo.dsl.CombinatorDsl._
-import mongo.query.Query.query
-import org.apache.log4j.Logger
-import org.specs2.mutable._
 import com.mongodb._
-import scalaz.concurrent.Task
+import org.specs2.mutable._
+import mongo.dsl.QueryDsl._
+import mongo.query.Query.query
+import mongo.dsl.CombinatorDsl._
+import org.apache.log4j.Logger
 import scalaz.stream.Process._
 import scala.collection.mutable._
 import scalaz.stream.process1
 
-class IntegrationMongoQueryingSpec extends Specification {
+class IntegrationMongoCleanUpSpec extends Specification {
   import MongoIntegrationEnv._
 
-  private val logger = Logger.getLogger(classOf[IntegrationMongoQueryingSpec])
-
-  "MongoServer querying" should {
-    "hit server with several query by date" in {
-      val (sink, buffer) = sinkWithBuffer[Int]
-      val (client, server) = mock()
-      val P = eval(Task.delay(client))
-
-      val products = query { b ⇒
-        b.q("dt" $lt new Date())
-        b.collection(PRODUCT)
-      }.toProcess(DB_NAME)
-
-      for (i ← 1 to 3) yield {
-        val p = for {
-          dbObject ← P through (products |> articleIds).channel
-          _ ← dbObject to sink
-        } yield ()
-
-        //It will be run even it prev process get hail
-        p.onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
-          .onComplete { eval(Task.delay(logger.info(s"Interaction $i has been completed"))) }
-          .runLog.run
-      }
-
-      client.close()
-      server.shutdown()
-      buffer must be equalTo (ids ++ ids ++ ids)
-    }
-  }
+  private val logger = Logger.getLogger(classOf[IntegrationMongoCleanUpSpec])
 
   "MongoServer querying" should {
     "hit server with multi conditional query" in {
@@ -54,7 +23,8 @@ class IntegrationMongoQueryingSpec extends Specification {
       val products = query { b ⇒
         b.q("article" $gt 2 $lt 40)
         b.collection(PRODUCT)
-      }.toProcess
+        b.db(DB_NAME)
+      }
 
       val p = for {
         dbObject ← Resource through (products |> articleIds).channel
@@ -75,7 +45,8 @@ class IntegrationMongoQueryingSpec extends Specification {
         b.q("article" $gt 2 $lt 40)
         b.sort("article" $eq -1)
         b.collection(PRODUCT)
-      }.toProcess
+        b.db(DB_NAME)
+      }
 
       val p = for {
         dbObject ← Resource through (products |> articleIds0).channel
@@ -96,7 +67,8 @@ class IntegrationMongoQueryingSpec extends Specification {
         import b._
         q("""{ "article" : 1 } """)
         collection(PRODUCT)
-      }.toProcess
+        b.db(DB_NAME)
+      }
 
       val p = for {
         dbObject ← Resource through (products |> nameTransducer).channel
@@ -112,14 +84,16 @@ class IntegrationMongoQueryingSpec extends Specification {
     query { b ⇒
       b.q("prod_num" $eq id)
       b.collection(PRODUCER)
-    }.toProcess |> nameTransducer
+      b.db(DB_NAME)
+    } |> nameTransducer
 
   def categories(e: (String, Buffer[Int])) = {
     query { b ⇒
       b.q("category" $in e._2)
       b.sort("name" $eq -1)
       b.collection(CATEGORY)
-    }.toProcess map { obj ⇒ s"${e._1} - ${obj.get("name").asInstanceOf[String]}" }
+      b.db(DB_NAME)
+    }.map { obj ⇒ s"${e._1} - ${obj.get("name").asInstanceOf[String]}" }
   }
 
   "MongoServer querying" should {
@@ -129,7 +103,8 @@ class IntegrationMongoQueryingSpec extends Specification {
       val products = query { b ⇒
         b.q(""" { "article": 1 } """)
         b.collection(PRODUCT)
-      }.toProcess |> numTransducer
+        b.db(DB_NAME)
+      } |> numTransducer
 
       val p = for {
         dbObject ← Resource through (for {
@@ -152,7 +127,8 @@ class IntegrationMongoQueryingSpec extends Specification {
       val prodsWithCategoryIds = query { b ⇒
         b.q(Obj("article" -> 1).toString)
         b.collection(PRODUCT)
-      }.toProcess |> categoryIds
+        b.db(DB_NAME)
+      } |> categoryIds
 
       val p = for {
         dbObject ← Resource through (
@@ -176,9 +152,10 @@ class IntegrationMongoQueryingSpec extends Specification {
       val products = query { b ⇒
         b.q(""" { "article": { "$gt" : 0, "$lt" : 4 } }""")
         b.collection(PRODUCT)
+        b.db(DB_NAME)
         b.limit(2)
         b.skip(1)
-      }.toProcess
+      }
 
       val p = for {
         dbObject ← Resource through (products |> articleIds).channel
@@ -205,12 +182,14 @@ class IntegrationMongoQueryingSpec extends Specification {
       val products = query { b ⇒
         b.q("article" $eq 1)
         b.collection(PRODUCT)
-      }.toProcess
+        b.db(DB_NAME)
+      }
 
       val categories = query { b ⇒
         b.q("category" $eq 12)
         b.collection(CATEGORY)
-      }.toProcess
+        b.db(DB_NAME)
+      }
 
       val p = for {
         dbObject ← Resource through ((products zip categories) |> resultTransducer).channel
@@ -237,12 +216,14 @@ class IntegrationMongoQueryingSpec extends Specification {
       val products = query { b ⇒
         b.q("article" $in Seq(1, 2, 3))
         b.collection(PRODUCT)
-      }.toProcess
+        b.db(DB_NAME)
+      }
 
       val categories = query { b ⇒
         b.q("category" $in Seq(12, 13))
         b.collection(CATEGORY)
-      }.toProcess
+        b.db(DB_NAME)
+      }
 
       val tee = products.zipWith(categories)(combiner)
 
@@ -255,34 +236,5 @@ class IntegrationMongoQueryingSpec extends Specification {
       buffer must be equalTo ArrayBuffer("1-12", "2-13")
     }
   }
-
-  /*
-  "MongoServer querying" should {
-    "hit server with query date" in {
-      val client = startMockDB()._1
-
-      for (i ← 1 to 5) yield {
-        logger.info("Iteration:" + i)
-
-        val db = client.getDB(DB_NAME)
-        Thread.sleep(100)
-        val q = new BasicDBObject("dt", new BasicDBObject("$lt", new Date()))
-        val cursor = db.getCollection(PRODUCT).find(q)
-        loop(cursor)
-
-        logger.info("Query: " + q.toString)
-
-        @tailrec
-        def loop(c: DBCursor): Unit = c.hasNext match {
-          case true ⇒
-            logger.info(s"Found: ${c.next()}"); loop(c)
-          case false ⇒
-        }
-      }
-
-      "1" must be equalTo "1"
-    }
-  }*/
-
   //TODO - Fold with monoid
 }

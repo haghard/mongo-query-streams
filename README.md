@@ -17,7 +17,8 @@ Using mongo.dsl.QueryDsl
       b.q(&&("num" $gt 3, "name" $eq "James"))
       b.sort("num" $eq -1)
       b.collection("tmp")
-    }.toProcess
+      b.db("test_db")
+    }
     
 ```
 
@@ -30,7 +31,8 @@ Using mongo.dsl.CombinatorDsl
     query { b ⇒
       b.q(q.toString)
       b.collection("tmp")
-    }.toProcess
+      b.db("test_db")
+    }
 
 ```
 Using native query
@@ -40,7 +42,8 @@ Using native query
     query { b ⇒
       b.q(""" { "article" : 1 } """)
       b.collection("tmp")
-    }.toProcess
+      b.db("test_db")
+    }
     
 ```
 
@@ -65,7 +68,8 @@ Here's a basic example how to use processes:
   val products = query { b ⇒
     b.q("article" $gt 2 $lt 40)
     b.collection(PRODUCT)
-  }.toProcess("db-name")
+    b.db("test_db")
+  }
 
   val p = for {
     dbObject <- P through (products |> nameTransducer).channel
@@ -73,7 +77,7 @@ Here's a basic example how to use processes:
   } yield ()
   
   p.onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
-   .onComplete { eval(Task.delay(logger.info(s"Interaction has been completed"))) }
+   .onComplete { eval(Task.delay(logger.debug(s"Interaction has been completed"))) }
    .runLog.run
    
   //result here
