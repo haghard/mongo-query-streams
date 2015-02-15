@@ -1,9 +1,9 @@
 package mongo.stream
 
-import java.util.Arrays._
-import java.util.Date
-import java.util.concurrent.{ TimeUnit, ExecutorService, Executors }
 import mongo._
+import java.util.Date
+import java.util.Arrays._
+import java.util.concurrent.{ TimeUnit, ExecutorService, Executors }
 import com.mongodb._
 import de.bwaldvogel.mongo.MongoServer
 import de.bwaldvogel.mongo.backend.memory.MemoryBackend
@@ -111,11 +111,11 @@ object MongoIntegrationEnv {
                   Task delay {
                     val collection = db.getCollection(set.collName)
                     val cursor = collection.find(set.q)
-                    logger debug s"Cursor: ${cursor.##} Query: ${set.q} Sort: ${set.sortQuery}"
                     set.sortQuery.foreach(cursor.sort(_))
                     set.skip.foreach(cursor.skip(_))
                     set.limit.foreach(cursor.limit(_))
                     set.maxTimeMS.foreach(cursor.maxTime(_, TimeUnit.MILLISECONDS))
+                    logger.debug(s"Cursor: ${cursor.##} Query: ${set.q} Sort: ${set.sortQuery}")
                     cursor
                   })(cursor ⇒ Task.delay(cursor.close)) { c ⇒
                     Task.delay {

@@ -87,14 +87,14 @@ object Query {
                 scalaz.stream.io.resource(
                   Task delay {
                     val collection = client.getDB(set.db).getCollection(set.collName)
-                    val cursor = collection.find(set.q)
-                    set.sortQuery.foreach(cursor.sort(_))
-                    logger.debug(s"Cursor: ${cursor.##} Query: ${set.q} Sort: ${set.sortQuery}")
-                    set.skip.foreach(cursor.skip(_))
-                    set.limit.foreach(cursor.limit(_))
-                    set.maxTimeMS.foreach(cursor.maxTime(_, TimeUnit.MILLISECONDS))
-                    cursor
-                  })(cursor ⇒ Task.delay(cursor.close)) { c ⇒
+                    val c = collection.find(set.q)
+                    set.sortQuery.foreach(c.sort(_))
+                    set.skip.foreach(c.skip(_))
+                    set.limit.foreach(c.limit(_))
+                    set.maxTimeMS.foreach(c.maxTime(_, TimeUnit.MILLISECONDS))
+                    logger.debug(s"Cursor: ${c.##} Query: ${set.q} Sort: ${set.sortQuery}")
+                    c
+                  })(c ⇒ Task.delay(c.close)) { c ⇒
                     Task.delay {
                       if (c.hasNext) {
                         c.next

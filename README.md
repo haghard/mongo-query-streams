@@ -53,6 +53,7 @@ Here's a basic example how to use processes:
   import scalaz.concurrent.Task
   import mongo.dsl.QueryDsl._
   import scalaz.stream.process._
+  import mongo.query.Query.default
 
   val client: MongoClient ...
   
@@ -87,4 +88,4 @@ Here's a basic example how to use processes:
 
 Status
 ------
-0.1 version
+0.2 version
