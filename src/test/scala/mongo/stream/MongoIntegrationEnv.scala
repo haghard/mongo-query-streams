@@ -130,12 +130,7 @@ object MongoIntegrationEnv {
               }(pool)
             })
           }
-        case -\/(error) ⇒
-          MongoProcess {
-            eval(Task.now { db: DB ⇒
-              Task(eval(Task.delay[DBObject](throw new MongoException(error))))(pool)
-            })
-          }
+        case -\/(error) ⇒ MongoProcess(eval(Task.fail(new MongoException(error))))
       }
     }
   }

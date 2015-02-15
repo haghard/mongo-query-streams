@@ -109,12 +109,7 @@ object Query {
           }
           MongoProcess(channel)
 
-        case -\/(error) ⇒
-          MongoProcess {
-            eval(Task.now { client: MongoClient ⇒
-              Task(eval(Task.delay[DBObject](throw new MongoException(error))))
-            })
-          }
+        case -\/(error) ⇒ MongoProcess(eval(Task.fail(new MongoException(error))))
       }
     }
   }
