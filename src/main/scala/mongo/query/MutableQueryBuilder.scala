@@ -4,12 +4,17 @@ import com.mongodb.DBObject
 import mongo.dsl.QueryContainer
 import mongo.parser.MqlParser
 
+import scala.util.{ Failure, Success, Try }
+import scalaz.{ -\/, \/-, \/, Scalaz }
+
 trait MutableQueryBuilder {
 
-  type QuerySetting = (DBObject, String, Option[DBObject], Option[Int], Option[Int], Option[Long])
+  case class QuerySetting(q: DBObject, collName: String, sortQuery: Option[DBObject],
+                          limit: Option[Int], skip: Option[Int], maxTimeMS: Option[Long])
 
-  private var query: Option[DBObject] = None
-  private var sortQuery: Option[DBObject] = None
+  private var query: String \/ Option[DBObject] = \/-(None)
+  private var sortQuery: String \/ Option[DBObject] = \/-(None)
+
   private var collectionName: Option[String] = None
 
   private var limit: Option[Int] = None
@@ -18,20 +23,27 @@ trait MutableQueryBuilder {
 
   private val parser = MqlParser()
 
+  private def parse0(query: String): String \/ Option[DBObject] = {
+    Try(parser.parse(query)) match {
+      case Success(q)  ⇒ (\/-(Option(q)))
+      case Failure(er) ⇒ -\/(er.getMessage)
+    }
+  }
+
   protected def qFromLine(q: String) {
-    query = Some(parser.parse(q))
+    query = parse0(q)
   }
 
   protected def qFromOps(ops: QueryContainer) = {
-    query = Some(ops.q)
+    query = \/-(Option(ops.q))
   }
 
   protected def sortFromLine(q: String) {
-    sortQuery = Some(parser.parse(q))
+    sortQuery = parse0(q)
   }
 
   protected def sortFromObj(query: QueryContainer) {
-    sortQuery = Some(query.q)
+    sortQuery = \/-(Option(query.q))
   }
 
   protected def limit0(n: Int) {
@@ -103,8 +115,14 @@ trait MutableQueryBuilder {
    *
    * @return
    */
-  def build(): Option[QuerySetting] =
-    for { q ← query; c ← collectionName } yield {
-      (q, c, sortQuery, limit, skip, maxTimeMS)
+  import Scalaz._
+  def build(): String \/ QuerySetting =
+    for {
+      qOr ← query
+      q ← qOr \/> "query shouldn't be empty"
+      c ← collectionName \/> "collectionName shouldn't be empty"
+      s ← sortQuery
+    } yield {
+      QuerySetting(q, c, s, limit, skip, maxTimeMS)
     }
 }

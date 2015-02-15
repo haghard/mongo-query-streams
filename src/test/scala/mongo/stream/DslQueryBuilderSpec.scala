@@ -1,3 +1,4 @@
+/*
 package mongo.stream
 
 import java.util.Arrays._
@@ -304,4 +305,4 @@ class DslQueryBuilderSpec extends Specification with Snippets {
       b.collection("tmp")
     }.queryDBObject mustEqual (new BasicDBObject("date", new BasicDBObject("$gt", dt)))
   }
-}
+}*/

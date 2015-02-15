@@ -1,7 +1,6 @@
 package mongo.query
 
-import mongo.streams.MongoQuery
-import com.mongodb.MongoException
+import mongo.streams.{ MongoQuery, InvalidMongoQuery, DefaultMongoQuery }
 
 object Query {
 
@@ -14,8 +13,9 @@ object Query {
     val builder = new DefaultMutableQueryBuilder()
     f(builder)
 
-    builder.build().fold(throw new MongoException("invalid query")) { dbObject ⇒
-      MongoQuery(dbObject._1, dbObject._2, dbObject._3, dbObject._4, dbObject._5)
-    }
+    builder.build().fold[MongoQuery](
+      { e ⇒ new InvalidMongoQuery(e) },
+      { s ⇒ new DefaultMongoQuery(s.q, s.collName, s.sortQuery, s.limit, s.skip, s.maxTimeMS) }
+    )
   }
 }

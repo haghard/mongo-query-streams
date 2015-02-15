@@ -2,19 +2,36 @@ package mongo.stream
 
 import java.util.Arrays._
 import java.util.Date
+import java.util.concurrent.Executors
 
-import com.mongodb.{ DB, BasicDBObject, ServerAddress, MongoClient }
+import com.mongodb._
 import de.bwaldvogel.mongo.MongoServer
 import de.bwaldvogel.mongo.backend.memory.MemoryBackend
+import mongo.NamedThreadFactory
 import org.apache.log4j.Logger
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable.{ Buffer, ArrayBuffer }
 import scalaz.concurrent.Task
-import scalaz.stream.{ Cause, io }
+import scalaz.stream.{ process1, Cause, io }
 
 object MongoIntegrationEnv {
 
   private val logger = Logger.getLogger(this.getClass)
+
+  implicit val mongoExecutor = Executors.newFixedThreadPool(10, new NamedThreadFactory("mongo-worker"))
+
+  val articleIds = process1.lift({ obj: DBObject ⇒ obj.get("article").asInstanceOf[Int] })
+
+  val articleIds0 = process1.lift({ obj: DBObject ⇒ obj.get("article").asInstanceOf[Int].toString })
+
+  val nameTransducer = process1.lift({ obj: DBObject ⇒ obj.get("name").toString })
+
+  val numTransducer = process1.lift({ obj: DBObject ⇒ obj.get("prod_num").asInstanceOf[Int] })
+
+  val categoryIds = process1.lift({ obj: DBObject ⇒
+    (obj.get("name").asInstanceOf[String], asScalaBuffer(obj.get("categories").asInstanceOf[java.util.List[Int]]))
+  })
 
   val ids = ArrayBuffer(1, 2, 3, 35)
 
@@ -55,9 +72,12 @@ object MongoIntegrationEnv {
     (client, server)
   }
 
+  def mock() = prepareMockMongo()
+
   def mockDB()(implicit executor: java.util.concurrent.ExecutorService): scalaz.stream.Process[Task, DB] = {
     io.resource(Task.delay(prepareMockMongo()))(rs ⇒ Task.delay {
-      rs._1.close; rs._2.shutdownNow;
+      rs._1.close
+      rs._2.shutdownNow
       logger debug s"mongo-client ${rs._1.##} has been closed"
     }) { rs ⇒
       var obtained = false

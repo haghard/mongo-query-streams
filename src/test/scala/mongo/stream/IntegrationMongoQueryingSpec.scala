@@ -1,55 +1,48 @@
 package mongo.stream
 
 import java.util.Date
-import java.util.concurrent.Executors
-import mongo.NamedThreadFactory
 import mongo.dsl.QueryDsl._
 import mongo.dsl.CombinatorDsl._
 import mongo.query.Query.query
 import org.apache.log4j.Logger
 import org.specs2.mutable._
 import com.mongodb._
+import scalaz.concurrent.Task
 import scalaz.stream.Process._
 import scala.collection.mutable._
 import scalaz.stream.process1
-import scala.collection.JavaConversions._
 
 class IntegrationMongoQueryingSpec extends Specification {
   import MongoIntegrationEnv._
 
   private val logger = Logger.getLogger(classOf[IntegrationMongoQueryingSpec])
 
-  implicit val mongoExecutor = Executors.newFixedThreadPool(10, new NamedThreadFactory("mongo-worker"))
-
-  val articleIds = process1.lift({ obj: DBObject ⇒ obj.get("article").asInstanceOf[Int] })
-
-  val articleIds0 = process1.lift({ obj: DBObject ⇒ obj.get("article").asInstanceOf[Int].toString })
-
-  val nameTransducer = process1.lift({ obj: DBObject ⇒ obj.get("name").toString })
-
-  val numTransducer = process1.lift({ obj: DBObject ⇒ obj.get("prod_num").asInstanceOf[Int] })
-
-  val categoryIds = process1.lift({ obj: DBObject ⇒
-    (obj.get("name").asInstanceOf[String], asScalaBuffer(obj.get("categories").asInstanceOf[java.util.List[Int]]))
-  })
-
   "MongoServer querying" should {
-    "hit server with query by date" in {
-      val Resource = mockDB()
+    "hit server with several query by date" in {
       val (sink, buffer) = sinkWithBuffer[Int]
+      val (client, server) = mock()
+      val P = eval(Task.delay(client))
 
-      def products = query { b ⇒
-        b.q("dt" $gt new Date())
+      val products = query { b ⇒
+        b.q("dt" $lt new Date())
         b.collection(PRODUCT)
-      }.toProcess
+      }.toProcess(DB_NAME)
 
-      val p = for {
-        dbObject ← Resource through (products |> articleIds).channel
-        _ ← dbObject to sink
-      } yield ()
+      for (i ← 1 to 3) yield {
+        val p = for {
+          dbObject ← P through (products |> articleIds).channel
+          _ ← dbObject to sink
+        } yield ()
 
-      p.run.run
-      buffer must be equalTo ids
+        //It will be run even it prev process get hail
+        p.onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
+          .onComplete { eval(Task.delay(logger.info(s"Interaction $i has been completed"))) }
+          .runLog.run
+      }
+
+      client.close()
+      server.shutdown()
+      buffer must be equalTo (ids ++ ids ++ ids)
     }
   }
 

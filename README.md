@@ -47,29 +47,38 @@ Using native query
 Here's a basic example how to use processes:
 
 ```scala
+  import scalaz.concurrent.Task
   import mongo.dsl.QueryDsl._
+  import scalaz.stream.process._
 
-  val Resource = mockDB()
-      
-  implicit val mongoExecutor =
-      Executors.newFixedThreadPool(5, new NamedThreadFactory("mongo-worker"))
+  val client: MongoClient ...
+  
+  val P = eval(Task.delay(client))
   
   val buffer: Buffer[String] = Buffer.empty
   val sink = scalaz.stream.io.fillBuffer(buffer)
-  
   val nameTransducer = process1.lift({ obj: DBObject ⇒ obj.get("name").toString })
+  
+  implicit val mongoExecutor = 
+    Executors.newFixedThreadPool(5, new NamedThreadFactory("mongo-worker"))
 
   val products = query { b ⇒
     b.q("article" $gt 2 $lt 40)
     b.collection(PRODUCT)
-  }.toProcess
+  }.toProcess("db-name")
 
   val p = for {
-    dbObject <- Resource through (products |> nameTransducer).channel
+    dbObject <- P through (products |> nameTransducer).channel
     _ <- dbObject to sink
   } yield ()
-    
-  p.runLog.run
+  
+  p.onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
+   .onComplete { eval(Task.delay(logger.info(s"Interaction has been completed"))) }
+   .runLog.run
+   
+  //result here
+  buffer
+   
 ```
 
 Status
