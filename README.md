@@ -88,4 +88,4 @@ Here's a basic example how to use processes:
 
 Status
 ------
-0.2 version
+0.3 version
