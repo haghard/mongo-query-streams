@@ -1,8 +1,8 @@
-package mongo.stream
+package mongo.query.test
 
 import java.util.Date
 import java.util.concurrent.atomic.AtomicBoolean
-import mongo.query.Query._
+import mongo.query.query
 import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
 import scalaz.concurrent.Task
@@ -11,7 +11,6 @@ import mongo.dsl._
 
 class IntegrationMongoSpec extends Specification {
   import MongoIntegrationEnv.{ executor, ids, sinkWithBuffer, mock, articleIds, DB_NAME, PRODUCT }
-  import mongo.query.Query.default
 
   private val logger = Logger.getLogger(classOf[IntegrationMongoSpec])
 

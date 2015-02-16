@@ -11,7 +11,7 @@ There are several way to create mongo query in type safe manner and treat it lik
 
 Using mongo.dsl._
 ```scala
-    import mongo.query.Query.query
+    import mongo.query._
     import mongo.dsl._
     query { b ⇒
       b.q(&&("num" $gt 3, "name" $eq "James"))
@@ -25,7 +25,7 @@ Using mongo.dsl._
 Using mongo.dsl2_
 ```scala
     import mongo._
-    import mongo.query.Query.query
+    import mongo.query._
     import mongo.dsl2._
     val q = Obj($and().op -> List(Obj("num" -> Obj(($gte(), 3), ($lt(), 10))), Obj("name" -> literal("Bauer"))))
     query { b ⇒
@@ -38,7 +38,7 @@ Using mongo.dsl2_
 Using native query
 
 ```scala
-    import mongo.query.Query.query
+    import mongo.query._
     query { b ⇒
       b.q(""" { "article" : 1 } """)
       b.collection("tmp")
@@ -50,10 +50,10 @@ Using native query
 Here's a basic example how to use processes:
 
 ```scala
-  import scalaz.concurrent.Task
   import mongo.dsl._
+  import mongo.query._
+  import scalaz.concurrent.Task
   import scalaz.stream.process._
-  import mongo.query.Query.default
 
   val client: MongoClient ...
   
@@ -88,4 +88,4 @@ Here's a basic example how to use processes:
 
 Status
 ------
-0.3 version
+0.4 version

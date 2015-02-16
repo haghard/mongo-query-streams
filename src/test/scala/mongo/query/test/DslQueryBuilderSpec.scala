@@ -1,8 +1,8 @@
-package mongo.stream
+package mongo.query.test
 
 import java.util.Date
-import mongo.query.Query.default
 import MongoIntegrationEnv.executor
+import mongo.query.query
 import org.specs2.mutable.Specification
 import org.specs2.specification.Snippets
 
@@ -15,7 +15,6 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
   * Single selector query with eq operator ${
       snippet {
-        import mongo.query.Query.query
         import mongo.dsl._
         query { b ⇒
           b.q("name" $eq "Taller")
@@ -28,7 +27,6 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
   * Single selector query with gt operator ${
       snippet {
-        import mongo.query.Query.query
         import mongo.dsl._
         query { b ⇒
           b.q("num" $gt 3)
@@ -42,7 +40,6 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
   * Single selector query with gte operator ${
       snippet {
-        import mongo.query.Query.query
         import mongo.dsl._
         query { b ⇒
           b.q("num" $gte 79.8)
@@ -55,7 +52,6 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Single selector query with lt operator ${
       snippet {
-        import mongo.query.Query.query
         import mongo.dsl._
         query { b ⇒
           b.q("num" $lt 199.78)
@@ -69,7 +65,6 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Single selector query with lte operator ${
       snippet {
-        import mongo.query.Query.query
         import mongo.dsl._
         query { b ⇒
           b.q("num" $lte 19.98)
@@ -82,7 +77,6 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Single selector query with ne operator ${
       snippet {
-        import mongo.query.Query.query
         import mongo.dsl._
         query { b ⇒
           b.q("flag" $ne true)
@@ -95,7 +89,6 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Single selector query with in operator ${
       snippet {
-        import mongo.query.Query.query
         import mongo.dsl._
         query { b ⇒
           b.q("num" $in Seq(1, 2, 4))
@@ -108,7 +101,6 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Single selector query with all operator ${
       snippet {
-        import mongo.query.Query.query
         import mongo.dsl._
         query { b ⇒
           b.q("num" $all Seq(1, 2, 4))
@@ -121,7 +113,6 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Single selector query with nin operator ${
       snippet {
-        import mongo.query.Query.query
         import mongo.dsl._
         query { b ⇒
           b.q("num" $nin Seq(1, 2, 4))
@@ -135,7 +126,6 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Single selector with nested conditions ${
       snippet {
-        import mongo.query.Query.query
         import mongo.dsl._
         query { b ⇒
           b.q("num" $gt 3 $lt 20 $nin Seq(11, 12))
@@ -148,7 +138,6 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Logical AND query ${
       snippet {
-        import mongo.query.Query.query
         import mongo.dsl._
         query { b ⇒
           b.q(&&("num" $gt 3, "name" $eq "James"))
@@ -161,7 +150,6 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Logical OR query ${
       snippet {
-        import mongo.query.Query.query
         import mongo.dsl._
         query { b ⇒
           b.q(||("num" $lt 9.78, "num2" $gte 89.1))
@@ -174,7 +162,6 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Logical AND query with complex inner queries ${
       snippet {
-        import mongo.query.Query.query
         import mongo.dsl._
         query { b ⇒
           b.q(||("num" $gte 3 $lt 10, "name" $eq "Jack Bauer"))
@@ -187,7 +174,6 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Logical OR query with nested AND's ${
       snippet {
-        import mongo.query.Query.query
         import mongo.dsl._
         query { b ⇒
           b.q(||(&&("num" $gte 178 $lte 199, "name" $eq "Jack Bauer"), &&("num" $gt 78 $lt 99, "name" $eq "James Bond")))
@@ -202,10 +188,9 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  """
   def body = new {
-    import mongo.query.Query.query
-    import mongo.query.Query.default
-    import MongoIntegrationEnv.executor
+
     import mongo.dsl._
+    import MongoIntegrationEnv.executor
 
     def verifyEq =
       query { b ⇒

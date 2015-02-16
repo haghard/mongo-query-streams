@@ -1,22 +1,9 @@
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.concurrent.{ ExecutorService, ThreadFactory }
+import java.util.concurrent.ThreadFactory
 import java.util.concurrent.atomic.AtomicInteger
 
-import com.mongodb.DBObject
-import mongo.query.MongoProcess
-
-import scalaz.\/
-import scalaz.concurrent.Task
-import scalaz.stream._
-
 package object mongo {
-
-  type MongoChannel[A] = Channel[Task, A, Process[Task, DBObject]]
-
-  trait MongoQuery[T] {
-    def toProcess(arg: String \/ QuerySetting)(implicit pool: ExecutorService): MongoProcess[T, DBObject]
-  }
 
   //Supported values
   sealed trait Values[T]
@@ -54,9 +41,6 @@ package object mongo {
   case class $and(override val op: String = "$and") extends MqlOp
   case class $or(override val op: String = "$or") extends MqlOp
   case class $ne(override val op: String = "$ne") extends MqlOp
-
-  case class QuerySetting(q: DBObject, db: String, collName: String, sortQuery: Option[DBObject],
-                          limit: Option[Int], skip: Option[Int], maxTimeMS: Option[Long])
 
   /**
    *

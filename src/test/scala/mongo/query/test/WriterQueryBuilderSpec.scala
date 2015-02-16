@@ -1,4 +1,4 @@
-package mongo.stream
+package mongo.query.test
 
 import java.util.Date
 
@@ -6,7 +6,7 @@ import mongo._
 import java.util.Arrays._
 import com.mongodb.BasicDBObject
 import mongo.dsl2._
-import mongo.parser.MqlParser
+import mongo.mqlparser.MqlParser
 import org.specs2.mutable.Specification
 
 class WriterQueryBuilderSpec extends Specification {

@@ -1,9 +1,9 @@
-package mongo.stream
+package mongo.query.test
 
 import com.mongodb._
+import mongo.query.query
 import org.specs2.mutable._
 import mongo.dsl._
-import mongo.query.Query.query
 import mongo.dsl2._
 import org.apache.log4j.Logger
 import scalaz.stream.Process._

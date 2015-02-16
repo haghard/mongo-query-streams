@@ -1,14 +1,13 @@
-package mongo.stream
+package mongo.query.test
 
-import mongo._
+import com.mongodb._
 import java.util.Date
 import java.util.Arrays._
 import java.util.concurrent.{ TimeUnit, ExecutorService, Executors }
-import com.mongodb._
 import de.bwaldvogel.mongo.MongoServer
 import de.bwaldvogel.mongo.backend.memory.MemoryBackend
-import mongo.query.MongoProcess
-import mongo.{ MongoQuery, NamedThreadFactory }
+import mongo.{ query, NamedThreadFactory }
+import mongo.query.{ MongoStream, ToProcess, QuerySetting }
 import org.apache.log4j.Logger
 
 import scala.collection.JavaConversions._
@@ -20,7 +19,7 @@ import scalaz.stream.{ process1, Cause, io }
 
 object MongoIntegrationEnv {
 
-  private val logger = Logger.getLogger(this.getClass)
+  private val logger = Logger.getLogger("test-query")
 
   implicit val executor = Executors.newFixedThreadPool(10, new NamedThreadFactory("mongo-worker"))
 
@@ -100,11 +99,11 @@ object MongoIntegrationEnv {
   /**
    * useful for test case
    */
-  implicit object TestCaseScope extends MongoQuery[DB] {
-    override def toProcess(arg: String \/ QuerySetting)(implicit pool: ExecutorService): MongoProcess[DB, DBObject] = {
+  implicit object TestCaseScope extends ToProcess[DB] {
+    override def toProcess(arg: String \/ QuerySetting)(implicit pool: ExecutorService): MongoStream[DB, DBObject] = {
       arg match {
         case \/-(set) ⇒
-          MongoProcess {
+          query.MongoStream {
             eval(Task.now { db: DB ⇒
               Task {
                 scalaz.stream.io.resource(
@@ -120,7 +119,10 @@ object MongoIntegrationEnv {
                   })(cursor ⇒ Task.delay(cursor.close)) { c ⇒
                     Task.delay {
                       if (c.hasNext) {
-                        c.next
+                        Thread.sleep(200) //for test
+                        val r = c.next
+                        logger.debug(r)
+                        r
                       } else {
                         logger.debug(s"Cursor: ${c.##} is exhausted")
                         throw Cause.Terminated(Cause.End)
@@ -130,7 +132,7 @@ object MongoIntegrationEnv {
               }(pool)
             })
           }
-        case -\/(error) ⇒ MongoProcess(eval(Task.fail(new MongoException(error))))
+        case -\/(error) ⇒ query.MongoStream(eval(Task.fail(new MongoException(error))))
       }
     }
   }
