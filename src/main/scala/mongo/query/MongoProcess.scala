@@ -7,20 +7,19 @@ import scalaz.stream.{ Channel, Process, Process1, Sink }
 case class MongoProcess[T, A](channel: Channel[Task, T, Process[Task, A]]) {
 
   private def innerMap[B](f: Process[Task, A] ⇒ Process[Task, B]): MongoProcess[T, B] =
-    MongoProcess(channel map (r ⇒ r andThen (pt ⇒ pt.map(p ⇒ f(p)))))
+    MongoProcess(channel.map(r ⇒ r andThen (pt ⇒ pt.map(p ⇒ f(p)))))
 
   def map[B](f: A ⇒ B): MongoProcess[T, B] = innerMap(_.map(f))
 
-  /** binds other MongoSource to this MongoSource **/
-  def flatMap[B](source: A ⇒ MongoProcess[T, B]): MongoProcess[T, B] = MongoProcess {
-    channel map {
-      (step: T ⇒ Task[Process[Task, A]]) ⇒
-        (task: T) ⇒
-          step(task) map { pa ⇒
-            pa.flatMap((a: A) ⇒
-              source(a).channel.flatMap(task0 ⇒ eval(task0(task)).flatMap(identity)))
-          }
-    }
+  /** binds other MongoProcess to this MongoProcess **/
+  def flatMap[B](f: A ⇒ MongoProcess[T, B]): MongoProcess[T, B] = MongoProcess {
+    channel.map(
+      (g: T ⇒ Task[Process[Task, A]]) ⇒ (task: T) ⇒
+        g(task).map { pa ⇒
+          pa.flatMap((a: A) ⇒
+            f(a).channel.flatMap(h ⇒ eval(h(task)).flatMap(identity)))
+        }
+    )
   }
 
   /** applies [[scalaz.stream.Process.append]] on resulting stream **/

@@ -7,7 +7,7 @@ import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
 import scalaz.concurrent.Task
 import scalaz.stream.Process._
-import mongo.dsl.QueryDsl._
+import mongo.dsl._
 
 class IntegrationMongoSpec extends Specification {
   import MongoIntegrationEnv.{ executor, ids, sinkWithBuffer, mock, articleIds, DB_NAME, PRODUCT }

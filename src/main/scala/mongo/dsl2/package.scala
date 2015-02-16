@@ -1,9 +1,8 @@
-package mongo.dsl
+package mongo
 
 import java.util.Date
-import mongo._
 
-trait CombinatorDsl {
+package object dsl2 {
 
   type Effect = StringBuilder ⇒ Unit
   type Par = (String, Action)
@@ -12,13 +11,13 @@ trait CombinatorDsl {
   object Action {
     import scala.xml.Utility.{ escape ⇒ esc }
 
-    private[CombinatorDsl] def s(s: String): Action = Action(sb ⇒ sb append s)
+    private[dsl2] def s(s: String): Action = Action(sb ⇒ sb append s)
 
-    private[CombinatorDsl] def value[T](s: T): Action = Action(sb ⇒ sb append s)
+    private[dsl2] def value[T](s: T): Action = Action(sb ⇒ sb append s)
 
-    private[CombinatorDsl] def escape(s: String): Action = Action(sb ⇒ sb append esc(s))
+    private[dsl2] def escape(s: String): Action = Action(sb ⇒ sb append esc(s))
 
-    private[CombinatorDsl] def intersperse(delim: Action)(as: TraversableOnce[Action]) = Action { sb ⇒
+    private[dsl2] def intersperse(delim: Action)(as: TraversableOnce[Action]) = Action { sb ⇒
       var between = false
       as.foreach { a ⇒
         if (between) {
@@ -33,7 +32,6 @@ trait CombinatorDsl {
   }
 
   final case class Action(f: Effect) extends Effect {
-
     def apply(sb: StringBuilder) = f(sb)
 
     def ++(other: Action) = Action { sb ⇒
@@ -47,9 +45,7 @@ trait CombinatorDsl {
       sb.toString
     }
   }
-}
 
-object CombinatorDsl extends CombinatorDsl {
   import Action._
 
   def literal(l: String): Action = s("\"") ++ escape(l) ++ s("\"")

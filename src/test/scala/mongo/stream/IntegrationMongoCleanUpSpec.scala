@@ -2,9 +2,9 @@ package mongo.stream
 
 import com.mongodb._
 import org.specs2.mutable._
-import mongo.dsl.QueryDsl._
+import mongo.dsl._
 import mongo.query.Query.query
-import mongo.dsl.CombinatorDsl._
+import mongo.dsl2._
 import org.apache.log4j.Logger
 import scalaz.stream.Process._
 import scala.collection.mutable._

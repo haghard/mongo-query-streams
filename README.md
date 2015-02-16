@@ -1,5 +1,5 @@
 Mongo-query-streams
-============
+===================
 
 Mongo query language
 
@@ -9,10 +9,10 @@ Design goals:
 
 There are several way to create mongo query in type safe manner and treat it like a scalaz-stream process
 
-Using mongo.dsl.QueryDsl
+Using mongo.dsl._
 ```scala
     import mongo.query.Query.query
-    import mongo.dsl.QueryDsl._
+    import mongo.dsl._
     query { b ⇒
       b.q(&&("num" $gt 3, "name" $eq "James"))
       b.sort("num" $eq -1)
@@ -22,11 +22,11 @@ Using mongo.dsl.QueryDsl
     
 ```
 
-Using mongo.dsl.CombinatorDsl
+Using mongo.dsl2_
 ```scala
     import mongo._
     import mongo.query.Query.query
-    import mongo.dsl.CombinatorDsl._
+    import mongo.dsl2._
     val q = Obj($and().op -> List(Obj("num" -> Obj(($gte(), 3), ($lt(), 10))), Obj("name" -> literal("Bauer"))))
     query { b ⇒
       b.q(q.toString)
@@ -51,7 +51,7 @@ Here's a basic example how to use processes:
 
 ```scala
   import scalaz.concurrent.Task
-  import mongo.dsl.QueryDsl._
+  import mongo.dsl._
   import scalaz.stream.process._
   import mongo.query.Query.default
 

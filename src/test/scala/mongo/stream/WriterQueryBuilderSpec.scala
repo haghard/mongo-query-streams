@@ -5,7 +5,7 @@ import java.util.Date
 import mongo._
 import java.util.Arrays._
 import com.mongodb.BasicDBObject
-import mongo.dsl.CombinatorDsl._
+import mongo.dsl2._
 import mongo.parser.MqlParser
 import org.specs2.mutable.Specification
 

@@ -5,7 +5,6 @@ import java.util.concurrent.{ TimeUnit, ExecutorService }
 import com.mongodb._
 import mongo._
 import mongo.parser.MqlParser
-import mongo.dsl.QueryContainer
 import org.apache.log4j.Logger
 
 import scalaz.concurrent.Task
@@ -35,13 +34,13 @@ private[query] trait MutableBuilder {
 
   def q(q: String): Unit = query = parse(q)
 
-  def q(qc: QueryContainer): Unit = query = \/-(Option(qc.q))
+  def q(qc: mongo.dsl.QueryBuilder): Unit = query = \/-(Option(qc.q))
 
   def db(name: String): Unit = dbName = Option(name)
 
   def sort(q: String): Unit = sortQuery = parse(q)
 
-  def sort(query: QueryContainer): Unit = sortQuery = \/-(Option(query.q))
+  def sort(query: mongo.dsl.QueryBuilder): Unit = sortQuery = \/-(Option(query.q))
 
   def limit(n: Int): Unit = limit = Some(n)
 
