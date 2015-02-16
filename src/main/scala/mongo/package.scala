@@ -3,7 +3,7 @@ import java.util.Date
 import java.util.concurrent.{ ExecutorService, ThreadFactory }
 import java.util.concurrent.atomic.AtomicInteger
 
-import com.mongodb.{ BasicDBObject, DBObject }
+import com.mongodb.DBObject
 import mongo.query.MongoProcess
 
 import scalaz.\/

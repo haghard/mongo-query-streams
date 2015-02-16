@@ -6,29 +6,6 @@ import mongo.parser.MqlParser
 import org.specs2.mutable.Specification
 
 class MQLParserSpec extends Specification {
-  /*
-  val inQ = """ { "num" : { "$in" : [ "3" , "4" , "5" , "67" , "8" , "9"] } } """
-  val querySelector = """{ "age": { "$gt" : 40 } }"""
-  val querySelector0 = """ { "name" : "Jack Boner" }"""
-  val querySelector1 = """ { "name" : "Jack Boner", "age" : 57 }"""
-
-  val multiCondQuerySelector = """{ age: { $gt: 39, $lt:42 }  }"""
-  val multiFieldsQuerySelector = """{ "num" : { "$gt" : 3, "$lt": 90 }, "name" : { "$lt" : 56 } }"""
-
-  val m0 = """{ "kkm":  {"$gt" : 3 } , { "$lte" : 67.5 } }"""
-  val m = """{ "num" : {"$gt" : 3 , "$lt" : 90} , "name" : { "$ne" : false } }"""
-  val m1 = """{ "kkm" : {"$gt" : 3 , "$lte" : 67.5 } }"""
-
-  val simpleAND = """{ "$and": [ { "num": { "$gt": 0 } } , { "name"  : { "$lt" : 56 } } ] }"""
-
-  val simpleAND1 = """{ "$and": [ { "num": { "$gt": 0 }  }, { "name": "56" } ] }  """
-
-  val complexOR = """{ "$or": [ { "$and": [ { "num": { "$gt": 78, "$lt": 99 } }, { "name": "Jack99" } ] } , { "$and": [ { "num": { "$gt": 178 } }, { "name": "Jack11" } ] } ] } """
-
-  val multiFieldsANDQuerySelector = """{ "$and": [ { "num" : { "$gt" : 3, "$lt": 90 } }, { "name": "Ivan" } ] }"""
-
-  val line = """{ "num" : { "$gt" : "ISODate=2015-02-12T20:46:14+04:00" } }"""
-  */
 
   "Single selector query" should {
     "be parsed" in {
