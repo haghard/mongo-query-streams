@@ -15,6 +15,31 @@ class IntegrationMongoCleanUpSpec extends Specification {
 
   private val logger = Logger.getLogger(classOf[IntegrationMongoCleanUpSpec])
 
+  private def producers(id: Int) =
+    query { b ⇒
+      b.q("producer_num" $eq id)
+      b.collection(PRODUCER)
+      b.db(DB_NAME)
+    } |> nameTransducer
+
+  private def categories(e: (String, Buffer[Int])) = {
+    query { b ⇒
+      b.q("category" $in e._2)
+      b.sort("name" $eq -1)
+      b.collection(CATEGORY)
+      b.db(DB_NAME)
+    } map { obj ⇒ s"${e._1} - ${obj.get("name").asInstanceOf[String]}" }
+  }
+
+  private def categories0(ids: Buffer[Int]) = {
+    query { b ⇒
+      b.q("category" $in ids)
+      b.sort("name" $eq -1)
+      b.collection(CATEGORY)
+      b.db(DB_NAME)
+    }
+  }
+
   "MongoServer querying" should {
     "hit server with multi conditional query" in {
       val Resource = mockDB()
@@ -80,26 +105,11 @@ class IntegrationMongoCleanUpSpec extends Specification {
     }
   }
 
-  def producers(id: Int) =
-    query { b ⇒
-      b.q("prod_num" $eq id)
-      b.collection(PRODUCER)
-      b.db(DB_NAME)
-    } |> nameTransducer
-
-  def categories(e: (String, Buffer[Int])) = {
-    query { b ⇒
-      b.q("category" $in e._2)
-      b.sort("name" $eq -1)
-      b.collection(CATEGORY)
-      b.db(DB_NAME)
-    }.map { obj ⇒ s"${e._1} - ${obj.get("name").asInstanceOf[String]}" }
-  }
-
   "MongoServer querying" should {
-    "hit server with join ONE-TO-ONE" in {
+    "hit server with join ONE-TO-MANY" in {
       val Resource = mockDB()
       val (sink, buffer) = sinkWithBuffer[String]
+
       val products = query { b ⇒
         b.q(""" { "article": 1 } """)
         b.collection(PRODUCT)
@@ -115,12 +125,13 @@ class IntegrationMongoCleanUpSpec extends Specification {
       } yield ()
 
       p.run.run
-      buffer(0) must be equalTo "Reebok"
+      //1 -> "Puma", "Reebok"
+      buffer must be equalTo ArrayBuffer("Puma", "Reebok")
     }
   }
 
   "MongoServer querying" should {
-    "hit server join ONE-TO-MANY" in {
+    "hit server with join ONE-TO-MANY with fold in single value" in {
       val Resource = mockDB()
       val (sink, buffer) = sinkWithBuffer[String]
 
@@ -140,7 +151,36 @@ class IntegrationMongoCleanUpSpec extends Specification {
       } yield ()
 
       p.run.run
-      buffer(0) must be equalTo "Extra Large Wheel Barrow - Rubberized Work Glove/Extra Large Wheel Barrow - Gardening Tools"
+      buffer(0) must be equalTo
+        "Extra Large Wheel Barrow - Rubberized Work Glove/Extra Large Wheel Barrow - Gardening Tools/Extra Large Wheel Barrow - Car Tools"
+    }
+  }
+
+  "MongoServer querying" should {
+    "hit server with join ONE-TO-MANY with monoid" in {
+      val Resource = mockDB()
+      val (sink, buffer) = sinkWithBuffer[String]
+      import scalaz._
+      import Scalaz._
+      implicit val M = scalaz.Monoid[String]
+
+      val prodsWithCategoryIds = query { b ⇒
+        b.q(Obj("article" -> 1).toString)
+        b.collection(PRODUCT)
+        b.db(DB_NAME)
+      } |> categoryIds
+
+      val p = for {
+        dbObject ← Resource through (
+          for {
+            n ← prodsWithCategoryIds
+            prod ← categories0(n._2)
+          } yield (prod)).channel
+        _ ← dbObject.foldMap(_.get("name").asInstanceOf[String] + ", ") to sink
+      } yield ()
+
+      p.run.run
+      buffer(0) must be equalTo "Rubberized Work Glove, Gardening Tools, Car Tools, "
     }
   }
 
@@ -208,9 +248,9 @@ class IntegrationMongoCleanUpSpec extends Specification {
       val Resource = mockDB()
       val (sink, buffer) = sinkWithBuffer[String]
 
-      val combiner = { (a: DBObject, b: DBObject) ⇒
-        a.get("article").asInstanceOf[Int].toString + "-" +
-          b.get("category").asInstanceOf[Int].toString
+      implicit val dataExtracter = { (a: DBObject, b: DBObject) ⇒
+        a.get("article").asInstanceOf[Int] + "-" +
+          b.get("category").asInstanceOf[Int]
       }
 
       val products = query { b ⇒
@@ -225,7 +265,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
         b.db(DB_NAME)
       }
 
-      val tee = products.zipWith(categories)(combiner)
+      val tee = products zipWith categories
 
       val p = for {
         dbObject ← Resource through tee.channel
@@ -236,5 +276,4 @@ class IntegrationMongoCleanUpSpec extends Specification {
       buffer must be equalTo ArrayBuffer("1-12", "2-13")
     }
   }
-  //TODO - Fold with monoid
 }

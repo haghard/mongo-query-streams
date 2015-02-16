@@ -29,7 +29,7 @@ object MongoIntegrationEnv {
 
   val nameTransducer = process1.lift({ obj: DBObject ⇒ obj.get("name").toString })
 
-  val numTransducer = process1.lift({ obj: DBObject ⇒ obj.get("prod_num").asInstanceOf[Int] })
+  val numTransducer = process1.lift({ obj: DBObject ⇒ obj.get("producer_num").asInstanceOf[Int] })
 
   val categoryIds = process1.lift({ obj: DBObject ⇒
     (obj.get("name").asInstanceOf[String], asScalaBuffer(obj.get("categories").asInstanceOf[java.util.List[Int]]))
@@ -54,8 +54,8 @@ object MongoIntegrationEnv {
     val products = client.getDB(DB_NAME).getCollection(PRODUCT)
 
     products.insert(new BasicDBObject("article", ids(0)).append("name", "Extra Large Wheel Barrow")
-      .append("prod_num", 1)
-      .append("categories", asList(12, 13)).append("dt", new Date()))
+      .append("producer_num", 1)
+      .append("categories", asList(12, 13, 14)).append("dt", new Date()))
 
     products.insert(new BasicDBObject("article", ids(1)).append("name", "Large Wheel Barrow").append("dt", new Date())
       .append("category", asList(13)).append("f", true))
@@ -65,12 +65,14 @@ object MongoIntegrationEnv {
       .append("category", asList(13)).append("f", true))
 
     val producer = client.getDB(DB_NAME).getCollection(PRODUCER)
-    producer.insert(new BasicDBObject().append("prod_num", 1).append("name", "Reebok"))
-    producer.insert(new BasicDBObject().append("prod_num", 2).append("name", "Adidas"))
+    producer.insert(new BasicDBObject().append("producer_num", 1).append("name", "Puma"))
+    producer.insert(new BasicDBObject().append("producer_num", 1).append("name", "Reebok"))
+    producer.insert(new BasicDBObject().append("producer_num", 2).append("name", "Adidas"))
 
     val category = client.getDB(DB_NAME).getCollection(CATEGORY)
     category.insert(new BasicDBObject().append("category", 12).append("name", "Gardening Tools"))
     category.insert(new BasicDBObject().append("category", 13).append("name", "Rubberized Work Glove"))
+    category.insert(new BasicDBObject().append("category", 14).append("name", "Car Tools"))
     (client, server)
   }
 

@@ -47,7 +47,7 @@ Using native query
     
 ```
 
-Here's a basic example how to use processes:
+Here's a basic example how to use processes for simple query:
 
 ```scala
   import mongo.dsl._
@@ -56,8 +56,7 @@ Here's a basic example how to use processes:
   import scalaz.stream.process._
 
   val client: MongoClient ...
-  
-  val P = eval(Task.delay(client))
+  val Resource = eval(Task.delay(client))
   
   val buffer: Buffer[String] = Buffer.empty
   val sink = scalaz.stream.io.fillBuffer(buffer)
@@ -73,7 +72,7 @@ Here's a basic example how to use processes:
   }
 
   val p = for {
-    dbObject <- P through (products |> nameTransducer).channel
+    dbObject <- Resource through (products |> nameTransducer).channel
     _ <- dbObject to sink
   } yield ()
   
@@ -85,6 +84,55 @@ Here's a basic example how to use processes:
   buffer
    
 ```
+
+Here's a basic example how to do join:
+
+```scala
+  import mongo.dsl._
+  import mongo.query._
+  import scalaz.concurrent.Task
+  import scalaz.stream.process._
+  import scalaz._
+  import Scalaz._
+  implicit val M = scalaz.Monoid[String]
+  
+  val (sink, buffer) = sinkWithBuffer[String]
+   
+  val client: MongoClient ...
+  val Resource = eval(Task.delay(client))
+
+  def categories(e: (String, Buffer[Int])) = {
+    query { b ⇒
+      b.q("category" $in e._2)
+      b.sort("name" $eq -1)
+      b.collection(CATEGORY)
+      b.db(DB_NAME)
+    }
+  }
+    
+  val prodsWithCatIds = query { b ⇒
+    b.q(Obj("article" -> 1).toString)
+    b.collection(PRODUCT)
+    b.db(DB_NAME)
+  }
+    
+  val p = for {
+    dbObject ← Resource through (
+      for {
+        n ← prodsWithCatIds
+        prod ← categories(n)
+      } yield (prod)).channel
+    _ ← dbObject.foldMap(_.get("name").asInstanceOf[String] + ", ") to sink
+  } yield ()
+    
+  p.onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
+    .onComplete { eval(Task.delay(logger.debug(s"Interaction has been completed"))) }
+    .runLog.run
+
+  //result here
+  buffer
+```
+
 
 Status
 ------

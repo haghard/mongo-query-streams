@@ -42,7 +42,7 @@ package object query {
 
     def |>[B](p2: Process1[A, B]): MongoStream[T, B] = pipe(p2)
 
-    def zipWith[B, C](stream: MongoStream[T, B])(f: (A, B) ⇒ C): MongoStream[T, C] = MongoStream {
+    def zipWith[B, C](stream: MongoStream[T, B])(implicit f: (A, B) ⇒ C): MongoStream[T, C] = MongoStream {
       val zipper: ((T ⇒ Task[Process[Task, A]], T ⇒ Task[Process[Task, B]]) ⇒ (T ⇒ Task[Process[Task, C]])) = {
         (fa, fb) ⇒
           (r: T) ⇒
