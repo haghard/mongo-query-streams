@@ -54,7 +54,7 @@ package object dsl {
   }
 
   private[dsl] case class OrQueryFragment(cs: TraversableOnce[QueryBuilder]) extends QueryBuilder {
-    override def q = new BasicDBObject("$and", cs.foldLeft(new util.ArrayList[DBObject]()) { (arr, c) ⇒
+    override def q = new BasicDBObject("$or", cs.foldLeft(new util.ArrayList[DBObject]()) { (arr, c) ⇒
       arr.add(c.q)
       arr
     })
