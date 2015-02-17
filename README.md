@@ -117,8 +117,8 @@ Here's a basic example how to do join:
   }
     
   val p = for {
-    dbObject ← Resource through (
-      for {
+    dbObject ← Resource through
+      (for {
         n ← prodsWithCatIds
         prod ← categories(n)
       } yield (prod)).channel
