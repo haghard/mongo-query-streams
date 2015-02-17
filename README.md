@@ -88,7 +88,8 @@ Here's a basic example how to use processes for simple query:
 
 Big win there is that `products` value incapsulates a full lifecycle of working
 with mongo client (get db by name, get collection by name, submit query with preferences, 
-fetch records from cursor, close cursor when he is exhausted)
+fetch records from cursor, close cursor when he is exhausted). Cursor will be closed even
+in exception case.
 
 
 Here's a example of how you can do join with to collections:
