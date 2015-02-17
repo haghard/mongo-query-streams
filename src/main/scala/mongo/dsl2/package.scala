@@ -19,7 +19,7 @@ package object dsl2 {
 
     private[dsl2] def intersperse(delim: Action)(as: TraversableOnce[Action]) = Action { sb ⇒
       var between = false
-      as.foreach { a ⇒
+      as foreach { a ⇒
         if (between) {
           delim(sb)
           a(sb)
@@ -28,6 +28,25 @@ package object dsl2 {
           between = true
         }
       }
+    }
+
+    private[dsl2] def entry(key: String, value: Action): Action =
+      literal(key) ++ s(" : ") ++ value
+
+    private[dsl2] def obj(entries: TraversableOnce[Par]): Action =
+      s("{ ") ++ intersperse(s(", "))(entries.map(p ⇒ entry(p._1, p._2))) ++ s(" }")
+
+    private[dsl2] def list(values: TraversableOnce[Action]): Action =
+      s("[") ++ intersperse(s(", "))(values) ++ s("]")
+
+    private[dsl2] def nestedMap(entries: TraversableOnce[KVS]): Action = Action { sb ⇒
+      var start = true
+      entries foreach { en ⇒
+        if (start) { start = false; s("{ ")(sb) }
+        else s(" , ")(sb)
+        (literal(en._1) ++ s(" : ") ++ obj(en._2))(sb)
+      }
+      if (!start) s(" } ")(sb)
     }
   }
 
@@ -49,25 +68,6 @@ package object dsl2 {
   import Action._
 
   def literal(l: String): Action = s("\"") ++ escape(l) ++ s("\"")
-
-  private def entry(key: String, value: Action): Action =
-    literal(key) ++ s(" : ") ++ value
-
-  private def obj(entries: TraversableOnce[Par]): Action =
-    s("{ ") ++ intersperse(s(", "))(entries.map(p ⇒ entry(p._1, p._2))) ++ s(" }")
-
-  private def list(values: TraversableOnce[Action]): Action =
-    s("[") ++ intersperse(s(", "))(values) ++ s("]")
-
-  private def nestedMap(entries: TraversableOnce[KVS]): Action = Action { sb ⇒
-    var start = true
-    entries foreach { en ⇒
-      if (start) { start = false; s("{ ")(sb) }
-      else s(" , ")(sb)
-      (literal(en._1) ++ s(" : ") ++ obj(en._2))(sb)
-    }
-    if (!start) s(" } ")(sb)
-  }
 
   def NestedMap(entries: KVS*): Action = nestedMap(entries)
 

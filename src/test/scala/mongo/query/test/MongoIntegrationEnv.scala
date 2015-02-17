@@ -55,10 +55,13 @@ object MongoIntegrationEnv {
 
     products.insert(new BasicDBObject("article", ids(0)).append("name", "Extra Large Wheel Barrow")
       .append("producer_num", 1)
-      .append("categories", asList(12, 13, 14)).append("dt", new Date()))
+      .append("categories", asList(12, 13, 14))
+      .append("dt", new Date()))
 
-    products.insert(new BasicDBObject("article", ids(1)).append("name", "Large Wheel Barrow").append("dt", new Date())
-      .append("category", asList(13)).append("f", true))
+    products.insert(new BasicDBObject("article", ids(1)).append("name", "Large Wheel Barrow")
+      .append("dt", new Date()).append("category", asList(13))
+      .append("f", true).append("categories", asList(12, 15)))
+
     products.insert(new BasicDBObject("article", ids(2)).append("name", "Medium Wheel Barrow").append("dt", new Date())
       .append("category", asList(13)).append("f", true))
     products.insert(new BasicDBObject("article", ids(3)).append("name", "Small Wheel Barrow").append("dt", new Date())
@@ -73,6 +76,7 @@ object MongoIntegrationEnv {
     category.insert(new BasicDBObject().append("category", 12).append("name", "Gardening Tools"))
     category.insert(new BasicDBObject().append("category", 13).append("name", "Rubberized Work Glove"))
     category.insert(new BasicDBObject().append("category", 14).append("name", "Car Tools"))
+    category.insert(new BasicDBObject().append("category", 15).append("name", "Car1 Tools"))
     (client, server)
   }
 
