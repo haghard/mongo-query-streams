@@ -4,8 +4,9 @@ Mongo-query-streams
 Mongo query language
 
 Design goals:  
-  To provide mongo query creation in type safe manner (dsl, combinators api).
-  Be able to use compositionality, expressiveness of scalaz-streams as advantage in mongo querying process.
+  * To provide mongo query creation in type safe manner
+  * Write resource safe code
+  * Be able to use compositionality, expressiveness of scalaz-streams as advantage in mongo querying
 
 There are several way to create mongo query in type safe manner and treat it like a scalaz-stream process
 
@@ -85,7 +86,12 @@ Here's a basic example how to use processes for simple query:
    
 ```
 
-Here's a basic example how to do join:
+Big win there is that `products` value incapsulates a full lifecycle of working
+with mongo client (get db by name, get collection by name, submit query with preferences, 
+fetch records from cursor, close cursor when he is exhausted)
+
+
+Here's a example of how you can do join with to collections:
 
 ```scala
   import mongo.dsl._
