@@ -76,7 +76,7 @@ object MongoIntegrationEnv {
     (client, server)
   }
 
-  def mock() = prepareMockMongo()
+  def mock(): (MongoClient, MongoServer) = prepareMockMongo()
 
   def mockDB()(implicit executor: java.util.concurrent.ExecutorService): scalaz.stream.Process[Task, DB] = {
     io.resource(Task.delay(prepareMockMongo()))(rs ⇒ Task.delay {
