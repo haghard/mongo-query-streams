@@ -136,16 +136,17 @@ Here's a basic example how to do join:
 To run tests:
   <code>sbt test</code>
 
-To generate html pages:
+  html pages:
 <code>sbt test-only -- html</code>
 
-To generate markdown files:
+  markdown files:
 <code>sbt test-only -- markdown</code>
 
-Generated files can be found in /target/spec2-reports
 
 To run output on console
   <code>test-only -- console</code>
+  
+Generated files can be found in /target/spec2-reports
 
 Status
 ------
