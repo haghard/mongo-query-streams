@@ -1,9 +1,10 @@
 package mongo
 
 import java.util
-import com.mongodb.{ BasicDBObject, DBObject }
-import scala.collection.JavaConversions._
 import scalaz.syntax.Ops
+import scalaz.concurrent.Task
+import scala.collection.JavaConversions._
+import com.mongodb.{ BasicDBObject, DBObject }
 
 package object dsl {
 
@@ -65,4 +66,70 @@ package object dsl {
 
   def &&(bs: QueryBuilder*) = AndQueryFragment(bs)
   def ||(bs: QueryBuilder*) = OrQueryFragment(bs)
+
+  import com.mongodb.DBObject
+  import scalaz.{ Functor, Free }
+
+  object free {
+    import scalaz.Free.liftF
+
+    type DslFree[T] = Free[QueryAlg, T]
+
+    private val Separator = " , "
+
+    private[free] sealed trait QueryAlg[+A] {
+      def map[B](f: A ⇒ B): QueryAlg[B]
+    }
+
+    object QueryAlg {
+      implicit val functor: Functor[QueryAlg] = new Functor[QueryAlg] {
+        def map[A, B](fa: QueryAlg[A])(f: A ⇒ B): QueryAlg[B] = fa map f
+      }
+    }
+
+    private case class EqFragment[+A](q: DBObject, next: DBObject ⇒ A) extends QueryAlg[A] {
+      override def map[B](f: (A) ⇒ B): QueryAlg[B] = copy(next = next andThen f)
+    }
+
+    private case class ChainFragment[+A](q: DBObject, next: DBObject ⇒ A) extends QueryAlg[A] {
+      override def map[B](f: (A) ⇒ B): QueryAlg[B] = copy(next = next andThen f)
+    }
+
+    implicit def frag2FreeM(fragment: EqQueryFragment): DslFree[DBObject] =
+      liftF(EqFragment(fragment.q, identity[DBObject]))
+
+    implicit def chainFrag2FreeM(fragment: ChainQueryFragment): DslFree[DBObject] =
+      liftF(ChainFragment(fragment.q, identity[DBObject]))
+
+    def step[T](exp: QueryAlg[DslFree[T]]): Task[DslFree[T]] =
+      exp match {
+        case EqFragment(q, next)    ⇒ Task now { q } map (next)
+        case ChainFragment(q, next) ⇒ Task now { q } map (next)
+      }
+
+    def instructions[T](program: DslFree[T], acts: List[String] = Nil): String =
+      program.resume.fold(
+        {
+          case EqFragment(q, next)    ⇒ instructions(next(q), q.toString :: acts)
+          case ChainFragment(q, next) ⇒ instructions(next(q), q.toString :: acts)
+        }, { r: T ⇒
+          if (acts.size > 1) {
+            val ops = acts.reverse
+            val line = ops.tail.foldLeft(new scala.StringBuilder(ops.head.dropRight(1)).append(Separator)) { (acc, c) ⇒
+              acc.append(c.drop(1)).append(Separator)
+            }.toString
+            line dropRight 3
+          } else acts.head
+
+          /*if (acts.size > 1) {
+            val line = acts.reverse.foldLeft(new scala.StringBuilder().append("""{ "$and" : [ """)) { (acc, c) ⇒
+              acc.append(c).append(Separator)
+            }.toString
+            val clean = if (line.substring(line.length - 3, line.length) == Separator) line.dropRight(3) else line
+            clean + "]}"
+          } else acts.head*/
+        })
+  }
+  // val q = NestedMap(("article" -> Seq($gt().op -> 3, $lt().op -> 90)),("producer_num" -> Seq(($eq().op -> 1))))
+  // { "num" : { "$gt" : 3, "$lt" : 90 } , "name" : { "$ne" : false } }
 }

@@ -34,8 +34,22 @@ Using mongo.dsl2_
       b.collection("tmp")
       b.db("test_db")
     }
-
+    
 ```
+
+Using mongo.dsl and free
+```scala
+    import mongo.dsl._
+    import free._
+
+    val program = for {
+      _ ← "article" $gt 0 $lt 4
+      x ← "producer_num" $gt 0
+    } yield x
+    
+    val query = instructions(program)
+```
+
 Using native query
 
 ```scala
@@ -74,7 +88,7 @@ Here's a basic example how to use processes for simple query:
 
   val p = for {
     dbObject <- Resource through (products |> nameTransducer).channel
-    _ <- dbObject to sink
+    _ <- observe EnvLogger to sink
   } yield ()
   
   p.onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
@@ -103,7 +117,7 @@ Here's a example of how you can do join with to collections:
   import Scalaz._
   implicit val M = scalaz.Monoid[String]
   
-  val (sink, buffer) = sinkWithBuffer[String]
+  def EnvLogger(): scalaz.stream.Sink[Task, String] = ...
    
   val client: MongoClient ...
   val Resource = eval(Task.delay(client))
@@ -129,7 +143,7 @@ Here's a example of how you can do join with to collections:
         n ← prodsWithCatIds
         prod ← categories(n)
       } yield (prod)).channel
-    _ ← dbObject.foldMap(_.get("name").asInstanceOf[String] + ", ") to sink
+    _ ← dbObject.foldMap(_.get("name").asInstanceOf[String] + ", ") observe EnvLogger to sink
   } yield ()
     
   p.onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
@@ -157,4 +171,4 @@ Generated files can be found in /target/spec2-reports
 
 Status
 ------
-0.4 version
+0.5 version

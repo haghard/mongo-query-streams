@@ -62,7 +62,7 @@ package object mqlparser {
     private val bool = """(true|false)""".r
     private val boolLiteral: P[String] = regex(bool)
 
-    lazy val rangeQueryOperators: P[MqlOp] = (""""$gte"""" | """"$gt"""" | """"$lte"""" | """"$lt"""" | """":"""" | """"$ne"""" | """"$not"""") ^^ {
+    lazy val rangeQueryOperators: P[MqlOp] = (""""$gte"""" | """"$gt"""" | """"$lte"""" | """"$lt"""" | """":"""" | """"$ne"""" | """"$not"""" | """"$eq"""") ^^ {
       case """"$gte"""" ⇒ $gte()
       case """"$gt""""  ⇒ $gt()
       case """"$lt""""  ⇒ $lt()
@@ -70,7 +70,8 @@ package object mqlparser {
 
       case """"$ne""""  ⇒ $ne()
       case """":""""    ⇒ $eq()
-      case f            ⇒ throw new UnsupportedOperationException(s"unsupported rangeQueryOperator ${f} ")
+      case """"$eq""""  ⇒ $eq()
+      case f            ⇒ throw new UnsupportedOperationException(s"unsupported rangeQueryOperator $f")
     }
 
     lazy val setQueryOperators: P[MqlOp] = (""""$in"""" | """"$all"""" | """"$nin"""") ^^ {

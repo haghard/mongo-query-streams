@@ -15,11 +15,11 @@ import scala.collection.mutable.{ Buffer, ArrayBuffer }
 import scalaz.stream.Process._
 import scalaz.{ -\/, \/-, \/ }
 import scalaz.concurrent.Task
-import scalaz.stream.{ process1, Cause, io }
+import scalaz.stream._
 
 object MongoIntegrationEnv {
 
-  private val logger = Logger.getLogger("test-query")
+  private val logger = org.apache.log4j.Logger.getLogger("test-query")
 
   implicit val executor = Executors.newFixedThreadPool(10, new NamedThreadFactory("mongo-worker"))
 
@@ -44,7 +44,11 @@ object MongoIntegrationEnv {
 
   def sinkWithBuffer[T] = {
     val buffer: Buffer[T] = Buffer.empty
-    (io.fillBuffer(buffer), buffer)
+    (scalaz.stream.io.fillBuffer(buffer), buffer)
+  }
+
+  def LoggerSink(logger: Logger): Sink[Task, String] = {
+    scalaz.stream.io.channel((o: String) ⇒ Task.delay { logger.debug(s"Result:  $o") })
   }
 
   private def prepareMockMongo(): (MongoClient, MongoServer) = {
@@ -59,6 +63,7 @@ object MongoIntegrationEnv {
       .append("dt", new Date()))
 
     products.insert(new BasicDBObject("article", ids(1)).append("name", "Large Wheel Barrow")
+      .append("producer_num", 2)
       .append("dt", new Date()).append("category", asList(13))
       .append("f", true).append("categories", asList(12, 15)))
 
@@ -83,7 +88,7 @@ object MongoIntegrationEnv {
   def mock(): (MongoClient, MongoServer) = prepareMockMongo()
 
   def mockDB()(implicit executor: java.util.concurrent.ExecutorService): scalaz.stream.Process[Task, DB] = {
-    io.resource(Task.delay(prepareMockMongo()))(rs ⇒ Task.delay {
+    scalaz.stream.io.resource(Task.delay(prepareMockMongo()))(rs ⇒ Task.delay {
       rs._1.close
       rs._2.shutdownNow
       logger.debug(s"mongo-client ${rs._1.##} has been closed")
