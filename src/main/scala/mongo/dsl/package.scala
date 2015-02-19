@@ -165,6 +165,5 @@ package object dsl {
             } else acts.head
           })
     }
-
   }
 }
