@@ -17,6 +17,7 @@ package mongo.query.test
 import mongo.dsl._
 import java.util.Date
 import mongo.query.query
+import scala.collection.mutable.ArrayBuffer
 import scalaz.concurrent.Task
 import org.apache.log4j.Logger
 import scalaz.stream.Process._
@@ -152,7 +153,7 @@ class IntegrationMongoSpec extends Specification with Snippets {
     buffer must be equalTo (ids ++ ids ++ ids)
   }
 
-  "Hit server with monadic query" in new TestEnviroment[String] {
+  "Hit server with monadic query to instructions" in new TestEnviroment[String] {
     import mongo.dsl._
     import free._
 
@@ -162,7 +163,7 @@ class IntegrationMongoSpec extends Specification with Snippets {
     } yield x
 
     val products = query { b ⇒
-      b.q(instructions(program))
+      b.q(toQuery(program))
       b.collection(PRODUCT)
       b.db(DB_NAME)
     }
@@ -177,7 +178,34 @@ class IntegrationMongoSpec extends Specification with Snippets {
       .onComplete { eval(Task.delay(logger.debug(s"Interaction has been completed"))) }
       .runLog.run
 
-    buffer(0) must be equalTo "1"
-    buffer(1) must be equalTo "2"
+    buffer must be equalTo ArrayBuffer("1", "2")
+  }
+
+  "Hit server with monadic query2" in new TestEnviroment[String] {
+    import mongo.dsl._
+    import free._
+
+    val program = for {
+      _ ← "article" $gt 0 $lt 4
+      x ← "producer_num" $gt 0
+    } yield x
+
+    val products = query { b ⇒
+      b.q(toQuery(program))
+      b.collection(PRODUCT)
+      b.db(DB_NAME)
+    }
+
+    val p = for {
+      dbObject ← Resource through (products |> articleIds0).channel
+      _ ← dbObject observe EnvLogger to sink
+    } yield ()
+
+    //It will be run even it prev process get hail
+    p.onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
+      .onComplete { eval(Task.delay(logger.debug(s"Interaction has been completed"))) }
+      .runLog.run
+
+    buffer must be equalTo ArrayBuffer("1", "2")
   }
 }

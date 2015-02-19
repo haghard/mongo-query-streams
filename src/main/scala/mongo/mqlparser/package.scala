@@ -76,7 +76,7 @@ package object mqlparser {
     private val bool = """(true|false)""".r
     private val boolLiteral: P[String] = regex(bool)
 
-    lazy val rangeQueryOperators: P[MqlOp] = (""""$gte"""" | """"$gt"""" | """"$lte"""" | """"$lt"""" | """":"""" | """"$ne"""" | """"$not"""" | """"$eq"""") ^^ {
+    lazy val rangeQueryOperators: P[MqlOp] = (""""$gte"""" | """"$gt"""" | """"$lte"""" | """"$lt"""" | """":"""" | """"$ne"""" | """"$not"""" /*| """"$eq""""*/ ) ^^ {
       case """"$gte"""" ⇒ $gte()
       case """"$gt""""  ⇒ $gt()
       case """"$lt""""  ⇒ $lt()
@@ -84,7 +84,7 @@ package object mqlparser {
 
       case """"$ne""""  ⇒ $ne()
       case """":""""    ⇒ $eq()
-      case """"$eq""""  ⇒ $eq()
+      //case """"$eq""""  ⇒ $eq()
       case f            ⇒ throw new UnsupportedOperationException(s"unsupported rangeQueryOperator $f")
     }
 
@@ -185,7 +185,8 @@ package object mqlparser {
       case first ~ rest ⇒
         val start = toDBObject(first)
         rest.foldLeft(start) { (acc, c) ⇒
-          acc.append(c._1, c._2)
+          if (c._2.get(UNNECESSARY_NAME_OP) != null) acc.append(c._1, c._2.get(UNNECESSARY_NAME_OP))
+          else acc.append(c._1, c._2)
         }
     }
 
@@ -206,8 +207,10 @@ package object mqlparser {
       }
 
     private def toDBObject(p: (String, BasicDBObject)) =
-      if (p._2.get(UNNECESSARY_NAME_OP) != null) new BasicDBObject(p._1, p._2.get(UNNECESSARY_NAME_OP))
-      else new BasicDBObject(p._1, p._2)
+      if (p._2.get(UNNECESSARY_NAME_OP) != null)
+        new BasicDBObject(p._1, p._2.get(UNNECESSARY_NAME_OP))
+      else
+        new BasicDBObject(p._1, p._2)
 
     lazy val arrayElement: P[BasicDBObject] = (selectorElements | logicalSelector) ^^ { case obj ⇒ obj }
 

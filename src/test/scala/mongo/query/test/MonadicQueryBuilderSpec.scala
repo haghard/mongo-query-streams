@@ -23,20 +23,40 @@ import java.util.Arrays._
 
 class MonadicQueryBuilderSpec extends Specification {
 
-  "Single selector query" should {
+  "monadic query" should {
     "be parsed" in {
       val program = for {
         _ ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
         x ← "producer_num" $eq 1
       } yield x
 
-      val actual = MqlParser().parse(instructions(program))
+      val actual = MqlParser().parse(toQuery(program))
+      val actual1 = toQuery(program)
 
       val expected = new BasicDBObject("article",
         new BasicDBObject("$gt", 0).append("$lt", 6).append("$nin", asList(4, 5)))
-        .append("producer_num", new BasicDBObject("$eq", 1))
+        .append("producer_num", 1)
 
       actual must be equalTo expected
+      actual1 must be equalTo expected
+    }
+  }
+
+  "monadic query" should {
+    "be parsed 2" in {
+      val program = for {
+        _ ← "producer_num" $eq 1
+        x ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
+      } yield x
+
+      val actual = MqlParser().parse(toQuery(program))
+      val actual1 = toQuery(program)
+
+      val expected = new BasicDBObject("producer_num", 1).append("article",
+        new BasicDBObject("$gt", 0).append("$lt", 6).append("$nin", asList(4, 5)))
+
+      actual must be equalTo expected
+      actual1 must be equalTo expected
     }
   }
 }

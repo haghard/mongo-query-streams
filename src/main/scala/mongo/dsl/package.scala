@@ -15,6 +15,7 @@
 package mongo
 
 import java.util
+import scalaz.{ ~>, State }
 import scalaz.syntax.Ops
 import scalaz.concurrent.Task
 import scala.collection.JavaConversions._
@@ -39,7 +40,7 @@ package object dsl {
         prev.append(op, v)
       })
 
-    def $eq[T: Values](v: T) = EqQueryFragment(field, new BasicDBObject(field, v))
+    def $eq[T: Values](v: T) = EqQueryFragment(new BasicDBObject(field, v))
     def $gt[T: Values](v: T) = self.copy(field, update(v, "$gt"))
     def $gte[T: Values](v: T) = self.copy(field, update(v, "$gte"))
     def $lt[T: Values](v: T) = self.copy(field, update(v, "$lt"))
@@ -50,7 +51,7 @@ package object dsl {
     def $nin[T: Values](vs: Iterable[T]) = self.copy(field, update(asJavaIterable(vs), "$nin"))
   }
 
-  private[dsl] case class EqQueryFragment(val field: String, override val q: BasicDBObject) extends QueryBuilder
+  private[dsl] case class EqQueryFragment(override val q: BasicDBObject) extends QueryBuilder
 
   private[dsl] case class ChainQueryFragment(val field: String, val nested: Option[BasicDBObject]) extends QueryDsl with QueryBuilder {
     override val self = this
@@ -89,7 +90,10 @@ package object dsl {
 
     type DslFree[T] = Free[QueryAlg, T]
 
+    type QueryState[A] = State[BasicDBObject, A]
+
     private val Separator = " , "
+    private val empty = new BasicDBObject()
 
     private[free] sealed trait QueryAlg[+A] {
       def map[B](f: A ⇒ B): QueryAlg[B]
@@ -101,11 +105,11 @@ package object dsl {
       }
     }
 
-    private case class EqFragment[+A](q: DBObject, next: DBObject ⇒ A) extends QueryAlg[A] {
+    private case class EqFragment[+A](q: BasicDBObject, next: DBObject ⇒ A) extends QueryAlg[A] {
       override def map[B](f: (A) ⇒ B): QueryAlg[B] = copy(next = next andThen f)
     }
 
-    private case class ChainFragment[+A](q: DBObject, next: DBObject ⇒ A) extends QueryAlg[A] {
+    private case class ChainFragment[+A](q: BasicDBObject, next: DBObject ⇒ A) extends QueryAlg[A] {
       override def map[B](f: (A) ⇒ B): QueryAlg[B] = copy(next = next andThen f)
     }
 
@@ -115,17 +119,37 @@ package object dsl {
     implicit def chainFrag2FreeM(fragment: ChainQueryFragment): DslFree[DBObject] =
       liftF(ChainFragment(fragment.q, identity[DBObject]))
 
-    def step[T](exp: QueryAlg[DslFree[T]]): Task[DslFree[T]] =
+    /*def step[T](exp: QueryAlg[DslFree[T]]): Task[DslFree[T]] =
       exp match {
         case EqFragment(q, next)    ⇒ Task now { q } map (next)
         case ChainFragment(q, next) ⇒ Task now { q } map (next)
-      }
+      }*/
 
-    def instructions[T](program: DslFree[T], acts: List[String] = Nil): String =
+    import scala.collection.JavaConversions.mapAsJavaMap
+    import scala.collection.JavaConversions.mapAsScalaMap
+
+    private def runState: QueryAlg ~> QueryState = new (QueryAlg ~> QueryState) {
+      def apply[A](op: QueryAlg[A]): QueryState[A] = op match {
+        case EqFragment(q, next) ⇒
+          State { (ops: BasicDBObject) ⇒
+            val m = mapAsJavaMap(mapAsScalaMap(ops.toMap) ++ mapAsScalaMap(q.toMap))
+            (new BasicDBObject(m), next(q))
+          }
+        case ChainFragment(q, next) ⇒
+          State { (ops: BasicDBObject) ⇒
+            val m = mapAsJavaMap(mapAsScalaMap(ops.toMap) ++ mapAsScalaMap(q.toMap))
+            (new BasicDBObject(m), next(q))
+          }
+      }
+    }
+
+    def toQuery[T](program: DslFree[T]): DBObject = program foldMap (runState) exec (empty)
+
+    def toQuery[T](program: DslFree[T], acts: List[String] = Nil): String =
       program.resume.fold(
         {
-          case EqFragment(q, next)    ⇒ instructions(next(q), q.toString :: acts)
-          case ChainFragment(q, next) ⇒ instructions(next(q), q.toString :: acts)
+          case EqFragment(q, next)    ⇒ toQuery(next(q), q.toString :: acts)
+          case ChainFragment(q, next) ⇒ toQuery(next(q), q.toString :: acts)
         }, { r: T ⇒
           if (acts.size > 1) {
             val ops = acts.reverse
@@ -134,16 +158,6 @@ package object dsl {
             }.toString
             line dropRight 3
           } else acts.head
-
-          /*if (acts.size > 1) {
-            val line = acts.reverse.foldLeft(new scala.StringBuilder().append("""{ "$and" : [ """)) { (acc, c) ⇒
-              acc.append(c).append(Separator)
-            }.toString
-            val clean = if (line.substring(line.length - 3, line.length) == Separator) line.dropRight(3) else line
-            clean + "]}"
-          } else acts.head*/
         })
   }
-  // val q = NestedMap(("article" -> Seq($gt().op -> 3, $lt().op -> 90)),("producer_num" -> Seq(($eq().op -> 1))))
-  // { "num" : { "$gt" : 3, "$lt" : 90 } , "name" : { "$ne" : false } }
 }

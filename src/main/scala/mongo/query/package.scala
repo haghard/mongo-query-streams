@@ -101,6 +101,8 @@ package object query {
 
     def q(q: String): Unit = query = parse(q)
 
+    def q(q: DBObject): Unit = query = \/-(Option(q))
+
     def q(qc: mongo.dsl.QueryBuilder): Unit = query = \/-(Option(qc.q))
 
     def db(name: String): Unit = dbName = Option(name)
