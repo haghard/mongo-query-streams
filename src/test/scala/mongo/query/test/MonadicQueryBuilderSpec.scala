@@ -18,10 +18,11 @@ import com.mongodb.BasicDBObject
 import mongo.mqlparser.MqlParser
 import org.specs2.mutable.Specification
 import mongo.dsl._
-import free._
 import java.util.Arrays._
 
 class MonadicQueryBuilderSpec extends Specification {
+
+  import free._
 
   "monadic query" should {
     "be parsed" in {
@@ -30,15 +31,14 @@ class MonadicQueryBuilderSpec extends Specification {
         x ← "producer_num" $eq 1
       } yield x
 
-      val actual = MqlParser().parse(toQuery(program))
-      val actual1 = toQuery(program)
+      val actual = MqlParser().parse(program.toQueryStr)
 
       val expected = new BasicDBObject("article",
         new BasicDBObject("$gt", 0).append("$lt", 6).append("$nin", asList(4, 5)))
         .append("producer_num", 1)
 
       actual must be equalTo expected
-      actual1 must be equalTo expected
+      program.toQuery must be equalTo expected
     }
   }
 
@@ -49,14 +49,13 @@ class MonadicQueryBuilderSpec extends Specification {
         x ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
       } yield x
 
-      val actual = MqlParser().parse(toQuery(program))
-      val actual1 = toQuery(program)
+      val actual = MqlParser().parse(program.toQueryStr)
 
       val expected = new BasicDBObject("producer_num", 1).append("article",
         new BasicDBObject("$gt", 0).append("$lt", 6).append("$nin", asList(4, 5)))
 
       actual must be equalTo expected
-      actual1 must be equalTo expected
+      program.toQuery must be equalTo expected
     }
   }
 }

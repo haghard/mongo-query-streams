@@ -86,6 +86,7 @@ package object dsl {
   import scalaz.{ Functor, Free }
 
   object free {
+
     import scalaz.Free.liftF
 
     type DslFree[T] = Free[QueryAlg, T]
@@ -143,21 +144,27 @@ package object dsl {
       }
     }
 
-    def toQuery[T](program: DslFree[T]): DBObject = program foldMap (runState) exec (empty)
+    implicit class ProgramImplicits[T](val program: DslFree[T]) extends AnyVal {
 
-    def toQuery[T](program: DslFree[T], acts: List[String] = Nil): String =
-      program.resume.fold(
-        {
-          case EqFragment(q, next)    ⇒ toQuery(next(q), q.toString :: acts)
-          case ChainFragment(q, next) ⇒ toQuery(next(q), q.toString :: acts)
-        }, { r: T ⇒
-          if (acts.size > 1) {
-            val ops = acts.reverse
-            val line = ops.tail.foldLeft(new scala.StringBuilder(ops.head.dropRight(1)).append(Separator)) { (acc, c) ⇒
-              acc.append(c.drop(1)).append(Separator)
-            }.toString
-            line dropRight 3
-          } else acts.head
-        })
+      def toQuery: DBObject = program foldMap (runState) exec (empty)
+
+      def toQueryStr: String = loop(program, Nil)
+
+      private def loop(program: DslFree[T], acts: List[String] = Nil): String =
+        program.resume.fold(
+          {
+            case EqFragment(q, next)    ⇒ loop(next(q), q.toString :: acts)
+            case ChainFragment(q, next) ⇒ loop(next(q), q.toString :: acts)
+          }, { r: T ⇒
+            if (acts.size > 1) {
+              val ops = acts.reverse
+              val line = ops.tail.foldLeft(new scala.StringBuilder(ops.head.dropRight(1)).append(Separator)) { (acc, c) ⇒
+                acc.append(c.drop(1)).append(Separator)
+              }.toString
+              line dropRight 3
+            } else acts.head
+          })
+    }
+
   }
 }

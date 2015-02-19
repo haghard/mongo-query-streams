@@ -163,7 +163,7 @@ class IntegrationMongoSpec extends Specification with Snippets {
     } yield x
 
     val products = query { b ⇒
-      b.q(toQuery(program))
+      b.q(program.toQueryStr)
       b.collection(PRODUCT)
       b.db(DB_NAME)
     }
@@ -191,7 +191,7 @@ class IntegrationMongoSpec extends Specification with Snippets {
     } yield x
 
     val products = query { b ⇒
-      b.q(toQuery(program))
+      b.q(program.toQuery)
       b.collection(PRODUCT)
       b.db(DB_NAME)
     }
