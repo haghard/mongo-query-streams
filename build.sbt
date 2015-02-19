@@ -16,7 +16,7 @@ logBuffered in Test := false
 
 initialCommands in console in Test := "import org.specs2._"
 
-//shellPrompt := { state => System.getProperty("user.name") + "> " }
+shellPrompt := { state => System.getProperty("user.name") + "> " }
 
 scalacOptions ++= Seq(
   "-feature",
@@ -81,12 +81,36 @@ javacOptions ++= Seq(
   "-Xlint:unchecked",
   "-Xlint:deprecation")
 
-//javaHome := Some(file("/Library/Java/JavaVirtualMachines/jdk1.7.0_51.jdk/Contents/Home"))
-
 // Publishing
 publishMavenStyle := true
 
 publishTo := Some(Resolver.file("file",  new File(localMvnRepo)))
+
+//sbt createHeaders
+headers := Map(
+  "scala" -> (
+    HeaderPattern.cStyleBlockComment,
+   """|/*
+      | * Licensed under the Apache License, Version 2.0 (the "License");
+      | * you may not use this file except in compliance with the License.
+      | * You may obtain a copy of the License at
+      | *
+      | *    http://www.apache.org/licenses/LICENSE-2.0
+      | *
+      | * Unless required by applicable law or agreed to in writing, software
+      | * distributed under the License is distributed on an "AS IS" BASIS,
+      | * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      | * See the License for the specific language governing permissions and
+      | * limitations under the License.
+      | */
+      |
+      |""".stripMargin
+    )
+)
+
+//create/update for Compile and Test configurations, add the following settings to your build
+inConfig(Compile)(compileInputs.in(compile) <<= compileInputs.in(compile).dependsOn(createHeaders.in(compile)))
+inConfig(Test)(compileInputs.in(compile) <<= compileInputs.in(compile).dependsOn(createHeaders.in(compile)))
 
 //eval System.getProperty("java.version")
 //eval System.getProperty("java.home")

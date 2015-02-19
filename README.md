@@ -48,6 +48,7 @@ Using mongo.dsl and free
     } yield x
     
     val query = instructions(program)
+    
 ```
 
 Using native query

@@ -5,3 +5,5 @@ addSbtPlugin("com.github.mpeltonen" % "sbt-idea" % "1.6.0")
 addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.1.4")
 
 addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.7.4")
+
+addSbtPlugin("de.heikoseeberger" % "sbt-header" % "1.1.1")
