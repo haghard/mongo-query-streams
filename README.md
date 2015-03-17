@@ -8,6 +8,19 @@ Design goals:
   * Write resource safe code
   * Be able to use compositionality, expressiveness of scalaz-streams as advantage in mongo querying
 
+Getting Started
+===================
+First, you will need to add the Bintray resolver settings to your SBT file:
+```scala
+    resolvers += "bintray-repo" at "http://dl.bintray.com/haghard/releases"
+```
+and
+ ```scala
+   libraryDependencies += "org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5"
+ ```
+
+Examples
+===================
 There are several way to create mongo query in type safe manner and treat it like a scalaz-stream process
 
 Using mongo.dsl._

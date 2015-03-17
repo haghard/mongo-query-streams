@@ -1,14 +1,16 @@
-import JmhKeys._
 import com.typesafe.sbt.SbtScalariform.ScalariformKeys
 import scalariform.formatter.preferences._
+import bintray.Keys._
 
-organization := "github.com/haghard"
+organization := "org.mongo.scalaz"
 
 name := "mongo-query-streams"
 
-version := "0.6-SNAPSHOT"
+//version := "0.6-SNAPSHOT"
 
-scalaVersion := "2.11.5"
+version := "0.5"
+
+scalaVersion := "2.11.6"
 
 parallelExecution := false
 parallelExecution in Test := false
@@ -17,6 +19,7 @@ logBuffered in Test := false
 initialCommands in console in Test := "import org.specs2._"
 
 shellPrompt := { state => System.getProperty("user.name") + "> " }
+
 
 scalacOptions ++= Seq(
   "-feature",
@@ -42,10 +45,6 @@ ScalariformKeys.preferences := ScalariformKeys.preferences.value
   .setPreference(AlignSingleLineCaseStatements, true)
 
 net.virtualvoid.sbt.graph.Plugin.graphSettings
-
-jmhSettings
-
-outputTarget in Jmh := target.value / s"scala-${scalaBinaryVersion.value}"
 
 resolvers += "Local Maven Repository" at "file:///" + localMvnRepo
 resolvers += "Scalaz Bintray Repo" at "http://dl.bintray.com/scalaz/releases"
@@ -81,10 +80,17 @@ javacOptions ++= Seq(
   "-Xlint:unchecked",
   "-Xlint:deprecation")
 
-// Publishing
-publishMavenStyle := true
 
-publishTo := Some(Resolver.file("file",  new File(localMvnRepo)))
+licenses += ("Apache-2.0", url("http://www.apache.org/licenses/"))
+
+bintraySettings
+
+bintrayOrganization in bintray := Some("haghard")
+
+repository in bintray := (if (version.value startsWith "master") "snapshots" else "releases")
+
+//publishMavenStyle := true
+//publishTo := Some(Resolver.file("file",  new File(localMvnRepo)))
 
 //sbt createHeaders
 headers := Map(

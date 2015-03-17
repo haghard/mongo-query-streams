@@ -29,7 +29,7 @@ package object dsl {
     def q: BasicDBObject
   }
 
-  private[dsl] trait QueryDsl extends Ops[ChainQueryFragment] {
+  private[dsl] trait QueryDsl extends scalaz.syntax.Ops[ChainQueryFragment] {
     mixin: { def field: String; def nested: Option[BasicDBObject] } ⇒
 
     private def update[T](v: T, op: String) = Option(
@@ -138,7 +138,7 @@ package object dsl {
       }
 
     /**
-     * Natural Transformations, map one functor QueryAlg to another QueryState.
+     * Natural Transformations, map one functor QueryAlg to QueryState.
      * @return
      */
     private def runState: QueryAlg ~> QueryState = new (QueryAlg ~> QueryState) {
