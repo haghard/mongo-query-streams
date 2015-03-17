@@ -14,11 +14,11 @@
 
 package mongo.query.test
 
+import mongo.dsl._
+import java.util.Arrays._
 import com.mongodb.BasicDBObject
 import mongo.mqlparser.MqlParser
 import org.specs2.mutable.Specification
-import mongo.dsl._
-import java.util.Arrays._
 
 class MonadicQueryBuilderSpec extends Specification {
 

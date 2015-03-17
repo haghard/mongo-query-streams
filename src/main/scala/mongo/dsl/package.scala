@@ -15,7 +15,9 @@
 package mongo
 
 import java.util
-import scalaz.{ ~>, State }
+import org.apache.log4j.Logger
+
+import scalaz.{ Monad, State, ~> }
 import scalaz.syntax.Ops
 import scalaz.concurrent.Task
 import scala.collection.JavaConversions._
@@ -86,12 +88,14 @@ package object dsl {
   import scalaz.{ Functor, Free }
 
   object free {
-
     import scalaz.Free.liftF
+    import scala.collection.JavaConversions.mapAsJavaMap
+    import scala.collection.JavaConversions.mapAsScalaMap
+
+    private val logger = Logger.getLogger("query")
 
     type DslFree[T] = Free[QueryAlg, T]
-
-    type QueryState[A] = State[BasicDBObject, A]
+    type QueryState[T] = State[BasicDBObject, T]
 
     private val Separator = " , "
     private val empty = new BasicDBObject()
@@ -104,6 +108,11 @@ package object dsl {
       implicit val functor: Functor[QueryAlg] = new Functor[QueryAlg] {
         def map[A, B](fa: QueryAlg[A])(f: A ⇒ B): QueryAlg[B] = fa map f
       }
+    }
+
+    implicit val mongoFreeMonad: Monad[DslFree] = new Monad[DslFree] {
+      def point[A](a: ⇒ A) = Free.point(a)
+      def bind[A, B](fa: DslFree[A])(f: A ⇒ DslFree[B]) = fa flatMap f
     }
 
     private case class EqFragment[+A](q: BasicDBObject, next: DBObject ⇒ A) extends QueryAlg[A] {
@@ -120,17 +129,20 @@ package object dsl {
     implicit def chainFrag2FreeM(fragment: ChainQueryFragment): DslFree[DBObject] =
       liftF(ChainFragment(fragment.q, identity[DBObject]))
 
-    /*def step[T](exp: QueryAlg[DslFree[T]]): Task[DslFree[T]] =
-      exp match {
-        case EqFragment(q, next)    ⇒ Task now { q } map (next)
-        case ChainFragment(q, next) ⇒ Task now { q } map (next)
-      }*/
+    //
+    //program.runM(step)
+    def step[T](op: QueryAlg[DslFree[T]]): Task[DslFree[T]] =
+      op match {
+        case EqFragment(q, next)    ⇒ Task now { logger.debug(q); q } map (next)
+        case ChainFragment(q, next) ⇒ Task now { logger.debug(q); q } map (next)
+      }
 
-    import scala.collection.JavaConversions.mapAsJavaMap
-    import scala.collection.JavaConversions.mapAsScalaMap
-
+    /**
+     * Natural Transformations, map one functor QueryAlg to another QueryState.
+     * @return
+     */
     private def runState: QueryAlg ~> QueryState = new (QueryAlg ~> QueryState) {
-      def apply[A](op: QueryAlg[A]): QueryState[A] = op match {
+      def apply[T](op: QueryAlg[T]): QueryState[T] = op match {
         case EqFragment(q, next) ⇒
           State { (ops: BasicDBObject) ⇒
             val m = mapAsJavaMap(mapAsScalaMap(ops.toMap) ++ mapAsScalaMap(q.toMap))

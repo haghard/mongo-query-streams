@@ -66,15 +66,15 @@ package object query {
             } yield x.zipWith(y)(f)
       }
 
-      def zip2[I, I2, O](f: (I, I2) ⇒ O): Tee[I, I2, O] =
+      def zipIt[I, I2, O](f: (I, I2) ⇒ O): Tee[I, I2, O] =
         (for {
           l ← awaitL[I]
-          r ← awaitR[I2];
+          r ← awaitR[I2]
           pair ← emit(f(l, r))
         } yield pair).repeat
 
       //channel.zipWith(stream.channel)(zipper)
-      channel.tee(stream.channel)(zip2(zipper))
+      channel.tee(stream.channel)(zipIt(zipper))
     }
 
     def zip[B](stream: MongoStream[T, B]): MongoStream[T, (A, B)] = zipWith(stream)((_, _))
@@ -122,7 +122,7 @@ package object query {
     def build(): String \/ QuerySetting
   }
 
-  def query[T](f: MutableBuilder ⇒ Unit)(implicit q: ToProcess[T], pool: ExecutorService): MongoStream[T, DBObject] = {
+  def query[T](f: MutableBuilder ⇒ Unit)(implicit pool: ExecutorService, q: ToProcess[T]): MongoStream[T, DBObject] = {
     val builder = new MutableBuilder {
       override def build(): String \/ QuerySetting =
         for {
@@ -131,9 +131,7 @@ package object query {
           db ← dbName \/> "DB name shouldn't be empty"
           c ← collectionName \/> "Collection name shouldn't be empty"
           s ← sortQuery
-        } yield {
-          QuerySetting(q, db, c, s, limit, skip, maxTimeMS)
-        }
+        } yield QuerySetting(q, db, c, s, limit, skip, maxTimeMS)
     }
     f(builder)
     q toProcess builder.build
