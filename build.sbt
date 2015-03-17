@@ -6,9 +6,7 @@ organization := "org.mongo.scalaz"
 
 name := "mongo-query-streams"
 
-//version := "0.6-SNAPSHOT"
-
-version := "0.5"
+version := "0.6-snapshot"
 
 scalaVersion := "2.11.6"
 
@@ -87,9 +85,9 @@ bintraySettings
 
 bintrayOrganization in bintray := Some("haghard")
 
-repository in bintray := (if (version.value startsWith "master") "snapshots" else "releases")
+repository in bintray := "snapshots" //"releases"
 
-//publishMavenStyle := true
+publishMavenStyle := true
 //publishTo := Some(Resolver.file("file",  new File(localMvnRepo)))
 
 //sbt createHeaders
