@@ -18,7 +18,6 @@ import java.util
 import org.apache.log4j.Logger
 
 import scalaz.{ Monad, State, ~> }
-import scalaz.syntax.Ops
 import scalaz.concurrent.Task
 import scala.collection.JavaConversions._
 import com.mongodb.{ BasicDBObject, DBObject }
@@ -30,7 +29,10 @@ package object dsl {
   }
 
   private[dsl] trait QueryDsl extends scalaz.syntax.Ops[ChainQueryFragment] {
-    mixin: { def field: String; def nested: Option[BasicDBObject] } ⇒
+
+    def field: String
+
+    def nested: Option[BasicDBObject]
 
     private def update[T](v: T, op: String) = Option(
       nested.fold(new BasicDBObject(op, v)) { prev ⇒
@@ -94,7 +96,7 @@ package object dsl {
 
     private val logger = Logger.getLogger("query")
 
-    type DslFree[T] = Free[QueryAlg, T]
+    type QueryFragment[T] = Free[QueryAlg, T]
     type QueryState[T] = State[BasicDBObject, T]
 
     private val Separator = " , "
@@ -110,9 +112,9 @@ package object dsl {
       }
     }
 
-    implicit val mongoFreeMonad: Monad[DslFree] = new Monad[DslFree] {
+    implicit val mongoFreeMonad: Monad[QueryFragment] = new Monad[QueryFragment] {
       def point[A](a: ⇒ A) = Free.point(a)
-      def bind[A, B](fa: DslFree[A])(f: A ⇒ DslFree[B]) = fa flatMap f
+      def bind[A, B](fa: QueryFragment[A])(f: A ⇒ QueryFragment[B]) = fa flatMap f
     }
 
     private case class EqFragment[+A](q: BasicDBObject, next: DBObject ⇒ A) extends QueryAlg[A] {
@@ -123,15 +125,15 @@ package object dsl {
       override def map[B](f: (A) ⇒ B): QueryAlg[B] = copy(next = next andThen f)
     }
 
-    implicit def frag2FreeM(fragment: EqQueryFragment): DslFree[DBObject] =
+    implicit def frag2FreeM(fragment: EqQueryFragment): QueryFragment[DBObject] =
       liftF(EqFragment(fragment.q, identity[DBObject]))
 
-    implicit def chainFrag2FreeM(fragment: ChainQueryFragment): DslFree[DBObject] =
+    implicit def chainFrag2FreeM(fragment: ChainQueryFragment): QueryFragment[DBObject] =
       liftF(ChainFragment(fragment.q, identity[DBObject]))
 
     //
     //program.runM(step)
-    def step[T](op: QueryAlg[DslFree[T]]): Task[DslFree[T]] =
+    def step[T](op: QueryAlg[QueryFragment[T]]): Task[QueryFragment[T]] =
       op match {
         case EqFragment(q, next)    ⇒ Task now { logger.debug(q); q } map (next)
         case ChainFragment(q, next) ⇒ Task now { logger.debug(q); q } map (next)
@@ -156,13 +158,13 @@ package object dsl {
       }
     }
 
-    implicit class ProgramImplicits[T](val program: DslFree[T]) extends AnyVal {
+    implicit class ProgramImplicits[T](val program: QueryFragment[T]) extends AnyVal {
 
       def toQuery: DBObject = program foldMap (runState) exec (empty)
 
       def toQueryStr: String = loop(program, Nil)
 
-      private def loop(program: DslFree[T], acts: List[String] = Nil): String =
+      private def loop(program: QueryFragment[T], acts: List[String] = Nil): String =
         program.resume.fold(
           {
             case EqFragment(q, next)    ⇒ loop(next(q), q.toString :: acts)

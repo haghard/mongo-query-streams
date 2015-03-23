@@ -7,6 +7,7 @@ Design goals:
   * To provide mongo query creation in type safe manner
   * Write resource safe code
   * Be able to use compositionality, expressiveness of scalaz-streams as advantage in mongo querying
+  * Consider the result as scalaz streams.
 
 Getting Started
 ===================

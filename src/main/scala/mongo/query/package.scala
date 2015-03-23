@@ -45,8 +45,8 @@ package object query {
     def flatMap[B](f: A ⇒ MongoStream[T, B]): MongoStream[T, B] = MongoStream {
       channel.map(
         (g: T ⇒ Task[Process[Task, A]]) ⇒ (task: T) ⇒
-          g(task).map { pa ⇒
-            pa.flatMap((a: A) ⇒
+          g(task).map { p ⇒
+            p.flatMap((a: A) ⇒
               f(a).channel.flatMap(h ⇒ eval(h(task)).flatMap(identity)))
           }
       )
@@ -66,7 +66,7 @@ package object query {
             } yield x.zipWith(y)(f)
       }
 
-      def zipIt[I, I2, O](f: (I, I2) ⇒ O): Tee[I, I2, O] =
+      def deterministicZip[I, I2, O](f: (I, I2) ⇒ O): Tee[I, I2, O] =
         (for {
           l ← awaitL[I]
           r ← awaitR[I2]
@@ -74,7 +74,7 @@ package object query {
         } yield pair).repeat
 
       //channel.zipWith(stream.channel)(zipper)
-      channel.tee(stream.channel)(zipIt(zipper))
+      channel.tee(stream.channel)(deterministicZip(zipper))
     }
 
     def zip[B](stream: MongoStream[T, B]): MongoStream[T, (A, B)] = zipWith(stream)((_, _))

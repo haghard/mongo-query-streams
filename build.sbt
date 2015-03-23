@@ -53,11 +53,7 @@ libraryDependencies ++= Seq(
     "log4j"             %   "log4j"             %   "1.2.14")
 
 libraryDependencies ++= Seq(
-  "de.bwaldvogel"   %   "mongo-java-server"   %   "1.1.3",
-  "org.specs2"      %%  "specs2-core"         %   spec2   %   "test",
-  "org.specs2"      %%  "specs2-mock"         %   spec2   %   "test",
-  "org.specs2"      %%  "specs2-junit"        %   spec2   %   "test",
-  "org.specs2"      %%  "specs2-scalacheck"   %   spec2   %   "test",
+  "de.bwaldvogel"   %   "mongo-java-server"   %   "1.1.3" %   "test" withSources(),
   "org.specs2"      %%  "specs2"              %   spec2   %   "test" withSources()
 )
 
