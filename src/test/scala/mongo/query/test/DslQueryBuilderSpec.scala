@@ -14,8 +14,10 @@
 
 package mongo.query.test
 
+import java.util.Arrays._
 import java.util.Date
 import MongoIntegrationEnv.executor
+import com.mongodb.BasicDBObject
 import mongo.query.query
 import org.specs2.mutable.Specification
 import org.specs2.specification.Snippets
@@ -23,7 +25,8 @@ import org.specs2.specification.Snippets
 class DslQueryBuilderSpec extends Specification with Snippets {
   override def is = s2"""
 
-  ${"Build mongo query with QueryDsl".title}
+   Build mongo query with QueryDsl
+   ===============================
 
   * Single selector query with eq operator ${
     snippet {
@@ -216,6 +219,18 @@ class DslQueryBuilderSpec extends Specification with Snippets {
     }
   }
 
+  ${body.verifyMonadicQuery}
+  * sadfs ${
+    snippet {
+      import mongo.dsl._
+      import free._
+      for {
+        _ ← "producer_num" $eq 1
+        x ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
+      } yield x
+    }
+  }
+
   """
   def body = new {
 
@@ -304,5 +319,16 @@ class DslQueryBuilderSpec extends Specification with Snippets {
       b.q("date" $gt new Date())
       b.collection("tmp")
     } mustNotEqual null
+
+    import free._
+
+    def verifyMonadicQuery = {
+      val expected = new BasicDBObject("article",
+        new BasicDBObject("$gt", 0).append("$lt", 6).append("$nin", asList(4, 5))).append("producer_num", 1)
+      (for {
+        _ ← "producer_num" $eq 1
+        x ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
+      } yield x).toQuery mustEqual expected
+    }
   }
 }

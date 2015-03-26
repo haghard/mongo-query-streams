@@ -6,7 +6,7 @@ organization := "org.mongo.scalaz"
 
 name := "mongo-query-streams"
 
-version := "0.6-snapshot"
+version := "0.5.1"
 
 scalaVersion := "2.11.6"
 
@@ -34,7 +34,7 @@ scalacOptions ++= Seq(
 val MongoDriverVersion = "2.13.0"
 val ScalazStreamVersion = "0.7a"
 val localMvnRepo = "/Volumes/Data/dev_build_tools/apache-maven-3.1.1/repository"
-val spec2 = "2.4.15"
+
 scalariformSettings
 
 ScalariformKeys.preferences := ScalariformKeys.preferences.value
@@ -54,7 +54,7 @@ libraryDependencies ++= Seq(
 
 libraryDependencies ++= Seq(
   "de.bwaldvogel"   %   "mongo-java-server"   %   "1.1.3" %   "test" withSources(),
-  "org.specs2"      %%  "specs2"              %   spec2   %   "test" withSources()
+  "org.specs2"      %%  "specs2-core"         %   "3.2"   %   "test" withSources()
 )
 
 scalacOptions ++= Seq(
