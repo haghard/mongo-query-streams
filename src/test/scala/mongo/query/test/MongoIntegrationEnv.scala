@@ -62,7 +62,7 @@ object MongoIntegrationEnv {
   }
 
   def LoggerSink(logger: Logger): Sink[Task, String] =
-    scalaz.stream.channel.lift[Task, String, Unit](o ⇒ Task.delay(logger.debug(s"Result:  $o")))
+    scalaz.stream.sink.lift[Task, String](o ⇒ Task.delay(logger.debug(s"Result:  $o")))
 
   private def prepareMockMongo(): (MongoClient, MongoServer) = {
     val server = new MongoServer(new MemoryBackend())
