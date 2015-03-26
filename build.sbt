@@ -32,7 +32,7 @@ scalacOptions ++= Seq(
 )
 
 val MongoDriverVersion = "2.13.0"
-val ScalazStreamVersion = "0.6a"
+val ScalazStreamVersion = "0.7a"
 val localMvnRepo = "/Volumes/Data/dev_build_tools/apache-maven-3.1.1/repository"
 val spec2 = "2.4.15"
 scalariformSettings
@@ -114,3 +114,6 @@ inConfig(Test)(compileInputs.in(compile) <<= compileInputs.in(compile).dependsOn
 
 //eval System.getProperty("java.version")
 //eval System.getProperty("java.home")
+
+//bintray:: tab
+//bintray::publish
