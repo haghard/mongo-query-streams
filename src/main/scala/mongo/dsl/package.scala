@@ -133,7 +133,7 @@ package object dsl {
     //program.runM(step)
     def step[T](op: QueryAlg[FreeQuery[T]]): Task[FreeQuery[T]] =
       op match {
-        case EqFragment(q, next)    ⇒ Task now { logger.debug(q); q } map (next)
+        case EqFragment(q, next)         ⇒ Task now { logger.debug(q); q } map (next)
         case ComposableFragment(q, next) ⇒ Task now { logger.debug(q); q } map (next)
       }
 
@@ -161,7 +161,7 @@ package object dsl {
       private def loop(program: FreeQuery[T], acts: List[String] = Nil): String =
         program.resume.fold(
           {
-            case EqFragment(q, next)    ⇒ loop(next(q), q.toString :: acts)
+            case EqFragment(q, next)         ⇒ loop(next(q), q.toString :: acts)
             case ComposableFragment(q, next) ⇒ loop(next(q), q.toString :: acts)
           }, { r: T ⇒
             if (acts.size > 1) {
