@@ -44,14 +44,16 @@ ScalariformKeys.preferences := ScalariformKeys.preferences.value
 
 net.virtualvoid.sbt.graph.Plugin.graphSettings
 
-resolvers += "Local Maven Repository" at "file:///" + localMvnRepo
-resolvers += "Scalaz Bintray Repo" at "http://dl.bintray.com/scalaz/releases"
-resolvers += "oncue.bintray" at "http://dl.bintray.com/oncue/releases"
+resolvers ++= Seq(
+  "Local Maven Repository" at "file:///" + localMvnRepo,
+  "Scalaz" at "http://dl.bintray.com/scalaz/releases",
+  "Oncue" at "http://dl.bintray.com/oncue/releases"
+)
 
 libraryDependencies ++= Seq(
     "org.mongodb"       %   "mongo-java-driver" %   MongoDriverVersion withSources(),
     "org.scalaz.stream" %%  "scalaz-stream"     %   ScalazStreamVersion withSources(),
-    //"oncue.ermine"      %%  "ermine-parser"     %   "0.2.1-2",
+    "oncue.ermine"      %%  "ermine-parser"     %   "0.2.1-2",
     "log4j"             %   "log4j"             %   "1.2.14")
 
 libraryDependencies ++= Seq(
