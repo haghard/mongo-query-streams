@@ -6,7 +6,7 @@ organization := "org.mongo.scalaz"
 
 name := "mongo-query-streams"
 
-version := "0.5.2"
+version := "0.5.3-snapshot"
 
 scalaVersion := "2.11.6"
 
@@ -118,4 +118,3 @@ inConfig(Test)(compileInputs.in(compile) <<= compileInputs.in(compile).dependsOn
 
 //bintray:: tab
 //bintray::publish
-//-snapshot
