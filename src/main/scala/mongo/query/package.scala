@@ -47,7 +47,7 @@ package object query {
         (g: T ⇒ Task[Process[Task, A]]) ⇒ (task: T) ⇒
           g(task).map { p ⇒
             p.flatMap((a: A) ⇒
-              f(a).channel.flatMap(h ⇒ eval(h(task)).flatMap(identity)))
+              f(a).channel.flatMap(h ⇒ eval(h(task)).flatMap(i ⇒ i /*identity*/ )))
           }
       )
     }
@@ -81,7 +81,6 @@ package object query {
   }
 
   private[query] trait MutableBuilder {
-
     private[query] var skip: Option[Int] = None
     private[query] var limit: Option[Int] = None
     private[query] var maxTimeMS: Option[Long] = None

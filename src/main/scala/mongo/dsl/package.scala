@@ -28,7 +28,7 @@ package object dsl {
     def q: BasicDBObject
   }
 
-  private[dsl] trait QueryDsl extends scalaz.syntax.Ops[ChainQueryFragment] {
+  private[dsl] trait QueryDsl extends scalaz.syntax.Ops[ComposableQuery] {
 
     def field: String
 
@@ -57,11 +57,9 @@ package object dsl {
 
   private[dsl] case class EqQueryFragment(override val q: BasicDBObject) extends QueryBuilder
 
-  private[dsl] case class ChainQueryFragment(val field: String, val nested: Option[BasicDBObject]) extends QueryDsl with QueryBuilder {
+  private[dsl] case class ComposableQuery(val field: String, val nested: Option[BasicDBObject]) extends QueryDsl with QueryBuilder {
     override val self = this
-
     override def q = new BasicDBObject(field, nested.fold(new BasicDBObject())(x ⇒ x))
-
     override def toString() = q.toString
   }
 
@@ -81,7 +79,7 @@ package object dsl {
     override def toString() = q.toString
   }
 
-  implicit def f2b(f: String) = ChainQueryFragment(f, None)
+  implicit def f2b(f: String) = ComposableQuery(f, None)
 
   def &&(bs: QueryBuilder*) = AndQueryFragment(bs)
   def ||(bs: QueryBuilder*) = OrQueryFragment(bs)
@@ -94,9 +92,9 @@ package object dsl {
     import scala.collection.JavaConversions.mapAsJavaMap
     import scala.collection.JavaConversions.mapAsScalaMap
 
-    private val logger = Logger.getLogger("query")
+    private val logger = Logger.getLogger("monadic-query")
 
-    type QueryFragment[T] = Free[QueryAlg, T]
+    type FreeQuery[T] = Free[QueryAlg, T]
     type QueryState[T] = State[BasicDBObject, T]
 
     private val Separator = " , "
@@ -112,36 +110,35 @@ package object dsl {
       }
     }
 
-    implicit val mongoFreeMonad: Monad[QueryFragment] = new Monad[QueryFragment] {
+    implicit val mongoFreeMonad: Monad[FreeQuery] = new Monad[FreeQuery] {
       def point[A](a: ⇒ A) = Free.point(a)
-      def bind[A, B](fa: QueryFragment[A])(f: A ⇒ QueryFragment[B]) = fa flatMap f
+      def bind[A, B](fa: FreeQuery[A])(f: A ⇒ FreeQuery[B]) = fa flatMap f
     }
 
     private case class EqFragment[+A](q: BasicDBObject, next: DBObject ⇒ A) extends QueryAlg[A] {
       override def map[B](f: (A) ⇒ B): QueryAlg[B] = copy(next = next andThen f)
     }
 
-    private case class ChainFragment[+A](q: BasicDBObject, next: DBObject ⇒ A) extends QueryAlg[A] {
+    private case class ComposableFragment[+A](q: BasicDBObject, next: DBObject ⇒ A) extends QueryAlg[A] {
       override def map[B](f: (A) ⇒ B): QueryAlg[B] = copy(next = next andThen f)
     }
 
-    implicit def frag2FreeM(fragment: EqQueryFragment): QueryFragment[DBObject] =
+    implicit def frag2FreeM(fragment: EqQueryFragment): FreeQuery[DBObject] =
       liftF(EqFragment(fragment.q, identity[DBObject]))
 
-    implicit def chainFrag2FreeM(fragment: ChainQueryFragment): QueryFragment[DBObject] =
-      liftF(ChainFragment(fragment.q, identity[DBObject]))
+    implicit def chainFrag2FreeM(fragment: ComposableQuery): FreeQuery[DBObject] =
+      liftF(ComposableFragment(fragment.q, identity[DBObject]))
 
     //
     //program.runM(step)
-    def step[T](op: QueryAlg[QueryFragment[T]]): Task[QueryFragment[T]] =
+    def step[T](op: QueryAlg[FreeQuery[T]]): Task[FreeQuery[T]] =
       op match {
         case EqFragment(q, next)    ⇒ Task now { logger.debug(q); q } map (next)
-        case ChainFragment(q, next) ⇒ Task now { logger.debug(q); q } map (next)
+        case ComposableFragment(q, next) ⇒ Task now { logger.debug(q); q } map (next)
       }
 
     /**
-     * Natural Transformations, map one functor QueryAlg to QueryState.
-     * @return
+     * Natural transformations, map one functor QueryAlg to QueryState
      */
     private def runState: QueryAlg ~> QueryState = new (QueryAlg ~> QueryState) {
       def apply[T](op: QueryAlg[T]): QueryState[T] = op match {
@@ -150,7 +147,7 @@ package object dsl {
             val m = mapAsJavaMap(mapAsScalaMap(ops.toMap) ++ mapAsScalaMap(q.toMap))
             (new BasicDBObject(m), next(q))
           }
-        case ChainFragment(q, next) ⇒
+        case ComposableFragment(q, next) ⇒
           State { (ops: BasicDBObject) ⇒
             val m = mapAsJavaMap(mapAsScalaMap(ops.toMap) ++ mapAsScalaMap(q.toMap))
             (new BasicDBObject(m), next(q))
@@ -158,17 +155,14 @@ package object dsl {
       }
     }
 
-    implicit class ProgramImplicits[T](val program: QueryFragment[T]) extends AnyVal {
-
-      def toQuery: DBObject = program foldMap (runState) exec (empty)
-
-      def toQueryStr: String = loop(program, Nil)
-
-      private def loop(program: QueryFragment[T], acts: List[String] = Nil): String =
+    implicit class ProgramImplicits[T](val program: FreeQuery[T]) extends AnyVal {
+      def toDBObject: DBObject = program foldMap (runState) exec (empty)
+      def toQuery: String = loop(program, Nil)
+      private def loop(program: FreeQuery[T], acts: List[String] = Nil): String =
         program.resume.fold(
           {
             case EqFragment(q, next)    ⇒ loop(next(q), q.toString :: acts)
-            case ChainFragment(q, next) ⇒ loop(next(q), q.toString :: acts)
+            case ComposableFragment(q, next) ⇒ loop(next(q), q.toString :: acts)
           }, { r: T ⇒
             if (acts.size > 1) {
               val ops = acts.reverse

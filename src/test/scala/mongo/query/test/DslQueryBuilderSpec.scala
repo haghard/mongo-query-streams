@@ -220,7 +220,7 @@ class DslQueryBuilderSpec extends Specification with Snippets {
   }
 
   ${body.verifyMonadicQuery}
-  * sadfs ${
+  * Monadic query ${
     snippet {
       import mongo.dsl._
       import free._
@@ -325,10 +325,11 @@ class DslQueryBuilderSpec extends Specification with Snippets {
     def verifyMonadicQuery = {
       val expected = new BasicDBObject("article",
         new BasicDBObject("$gt", 0).append("$lt", 6).append("$nin", asList(4, 5))).append("producer_num", 1)
+
       (for {
         _ ← "producer_num" $eq 1
         x ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
-      } yield x).toQuery mustEqual expected
+      } yield x).toDBObject mustEqual expected
     }
   }
 }

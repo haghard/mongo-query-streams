@@ -22,7 +22,7 @@ import scalaz.concurrent.Task
 import org.apache.log4j.Logger
 import scalaz.stream.Process._
 import java.util.concurrent.atomic.AtomicBoolean
-import MongoIntegrationEnv.{ executor, ids, sinkWithBuffer, mock, articleIds, articleIds0, DB_NAME, PRODUCT }
+import MongoIntegrationEnv.{ executor, ids, sinkWithBuffer, mock, asArticleId, asArticleIdsStr, DB_NAME, PRODUCT }
 
 import org.specs2.mutable._
 import org.specs2.specification.Snippets
@@ -63,7 +63,7 @@ class IntegrationMongoSpec extends Specification with Snippets {
     }
 
     val p = for {
-      dbObject ← Resource through (q |> articleIds).channel
+      dbObject ← Resource through (q |> asArticleId).channel
       _ ← dbObject to sink
     } yield ()
 
@@ -82,7 +82,7 @@ class IntegrationMongoSpec extends Specification with Snippets {
     }
 
     val p = for {
-      dbObject ← Resource through (q |> articleIds).channel
+      dbObject ← Resource through (q |> asArticleId).channel
       _ ← dbObject to sink
     } yield ()
 
@@ -102,7 +102,7 @@ class IntegrationMongoSpec extends Specification with Snippets {
     }
 
     val p = for {
-      dbObject ← Resource through (q |> articleIds).channel
+      dbObject ← Resource through (q |> asArticleId).channel
       _ ← dbObject to sink
     } yield ()
 
@@ -120,7 +120,7 @@ class IntegrationMongoSpec extends Specification with Snippets {
     }
 
     val p = for {
-      dbObject ← Resource through (q |> articleIds).channel
+      dbObject ← Resource through (q |> asArticleId).channel
       _ ← dbObject to sink
     } yield ()
 
@@ -140,7 +140,7 @@ class IntegrationMongoSpec extends Specification with Snippets {
 
     for (i ← 1 to 3) yield {
       val p = for {
-        dbObject ← Resource through (products |> articleIds).channel
+        dbObject ← Resource through (products |> asArticleId).channel
         _ ← dbObject to sink
       } yield ()
 
@@ -163,13 +163,13 @@ class IntegrationMongoSpec extends Specification with Snippets {
     } yield x
 
     val products = query { b ⇒
-      b.q(program.toQueryStr)
+      b.q(program.toQuery)
       b.collection(PRODUCT)
       b.db(DB_NAME)
     }
 
     val p = for {
-      dbObject ← Resource through (products |> articleIds0).channel
+      dbObject ← Resource through (products |> asArticleIdsStr).channel
       _ ← dbObject observe EnvLogger to sink
     } yield ()
 
@@ -191,13 +191,13 @@ class IntegrationMongoSpec extends Specification with Snippets {
     } yield x
 
     val products = query { b ⇒
-      b.q(program.toQuery)
+      b.q(program.toDBObject)
       b.collection(PRODUCT)
       b.db(DB_NAME)
     }
 
     val p = for {
-      dbObject ← Resource through (products |> articleIds0).channel
+      dbObject ← Resource through (products |> asArticleIdsStr).channel
       _ ← dbObject observe EnvLogger to sink
     } yield ()
 

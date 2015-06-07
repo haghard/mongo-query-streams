@@ -14,9 +14,9 @@
 
 package mongo
 
+import scala.util.Try
 import scala.annotation.tailrec
 import com.mongodb.{ BasicDBObject, MongoException }
-import scala.util.Try
 import scala.util.parsing.combinator.{ JavaTokenParsers, PackratParsers }
 
 package object mqlparser {
@@ -207,10 +207,8 @@ package object mqlparser {
       }
 
     private def toDBObject(p: (String, BasicDBObject)) =
-      if (p._2.get(UNNECESSARY_NAME_OP) != null)
-        new BasicDBObject(p._1, p._2.get(UNNECESSARY_NAME_OP))
-      else
-        new BasicDBObject(p._1, p._2)
+      if (p._2.get(UNNECESSARY_NAME_OP) != null) new BasicDBObject(p._1, p._2.get(UNNECESSARY_NAME_OP))
+      else new BasicDBObject(p._1, p._2)
 
     lazy val arrayElement: P[BasicDBObject] = (selectorElements | logicalSelector) ^^ { case obj ⇒ obj }
 

@@ -6,7 +6,7 @@ organization := "org.mongo.scalaz"
 
 name := "mongo-query-streams"
 
-version := "0.5.2-snapshot"
+version := "0.5.2"
 
 scalaVersion := "2.11.6"
 
@@ -32,7 +32,7 @@ scalacOptions ++= Seq(
 )
 
 val MongoDriverVersion = "2.13.0"
-val ScalazStreamVersion = "0.7a"
+val ScalazStreamVersion = "0.7.1a"
 val localMvnRepo = "/Volumes/Data/dev_build_tools/apache-maven-3.1.1/repository"
 
 scalariformSettings
@@ -46,10 +46,12 @@ net.virtualvoid.sbt.graph.Plugin.graphSettings
 
 resolvers += "Local Maven Repository" at "file:///" + localMvnRepo
 resolvers += "Scalaz Bintray Repo" at "http://dl.bintray.com/scalaz/releases"
+resolvers += "oncue.bintray" at "http://dl.bintray.com/oncue/releases"
 
 libraryDependencies ++= Seq(
     "org.mongodb"       %   "mongo-java-driver" %   MongoDriverVersion withSources(),
     "org.scalaz.stream" %%  "scalaz-stream"     %   ScalazStreamVersion withSources(),
+    //"oncue.ermine"      %%  "ermine-parser"     %   "0.2.1-2",
     "log4j"             %   "log4j"             %   "1.2.14")
 
 libraryDependencies ++= Seq(
@@ -77,8 +79,6 @@ javacOptions ++= Seq(
 seq(bintraySettings:_*)
 
 licenses += ("Apache-2.0", url("http://www.apache.org/licenses/"))
-
-//bintraySettings
 
 bintrayOrganization in bintray := Some("haghard")
 
@@ -118,3 +118,4 @@ inConfig(Test)(compileInputs.in(compile) <<= compileInputs.in(compile).dependsOn
 
 //bintray:: tab
 //bintray::publish
+//-snapshot

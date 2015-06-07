@@ -51,18 +51,18 @@ Using mongo.dsl2_
     
 ```
 
-Using mongo.dsl and free
+Using monadic query composition
 ```scala
     import mongo.dsl._
     import free._
-
-    val program = for {
-      _ ← "article" $gt 0 $lt 4
-      x ← "producer_num" $gt 0
+    
+    val query = for {
+    _ ← "producer_num" $eq 1
+    x ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
     } yield x
     
-    val query = instructions(program)
-    
+    query.toQuery
+    query.toDBObject    
 ```
 
 Using native query
@@ -121,7 +121,7 @@ fetch records from cursor, close the cursor when he is exhausted). Cursor will b
 in exception case.
 
 
-Here's a example of how you can do join with to collections:
+Here's a example of how you can do join between to collections:
 
 ```scala
   import mongo.dsl._
@@ -186,4 +186,4 @@ Generated files can be found in /target/spec2-reports
 
 Status
 ------
-0.5 version
+0.5.2 version

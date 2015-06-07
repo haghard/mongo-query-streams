@@ -32,22 +32,24 @@ import scalaz.concurrent.Task
 import scalaz.stream._
 
 object MongoIntegrationEnv {
+  import process1._
 
-  private val logger = org.apache.log4j.Logger.getLogger("test-query")
+  private val logger = org.apache.log4j.Logger.getLogger("mongo-streams")
 
-  implicit val executor = Executors.newFixedThreadPool(10, new NamedThreadFactory("mongo-worker"))
+  implicit val executor = Executors.newFixedThreadPool(5, new NamedThreadFactory("mongo-worker"))
 
-  val articleIds = process1.lift({ obj: DBObject ⇒ obj.get("article").asInstanceOf[Int] })
+  val asArticleId = lift { obj: DBObject ⇒ obj.get("article").asInstanceOf[Int] }
 
-  val articleIds0 = process1.lift({ obj: DBObject ⇒ obj.get("article").asInstanceOf[Int].toString })
+  val asArticleIdsStr = lift { obj: DBObject ⇒ obj.get("article").asInstanceOf[Int].toString }
 
-  val nameTransducer = process1.lift({ obj: DBObject ⇒ obj.get("name").toString })
+  val asNameStr = lift { obj: DBObject ⇒ obj.get("name").toString }
 
-  val numTransducer = process1.lift({ obj: DBObject ⇒ obj.get("producer_num").asInstanceOf[Int] })
+  val asNum = lift { obj: DBObject ⇒ obj.get("producer_num").asInstanceOf[Int] }
 
-  val categoryIds = process1.lift({ obj: DBObject ⇒
-    (obj.get("name").asInstanceOf[String], asScalaBuffer(obj.get("categories").asInstanceOf[java.util.List[Int]]))
-  })
+  val categoryIds = lift { obj: DBObject ⇒
+    (obj.get("name").asInstanceOf[String],
+      asScalaBuffer(obj.get("categories").asInstanceOf[java.util.List[Int]]))
+  }
 
   val ids = ArrayBuffer(1, 2, 3, 35)
 

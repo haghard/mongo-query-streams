@@ -46,7 +46,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
       b.q("producer_num" $eq id)
       b.collection(PRODUCER)
       b.db(DB_NAME)
-    } |> nameTransducer
+    } |> asNameStr
 
   private def categories(e: (String, Buffer[Int])) = {
     query { b ⇒
@@ -66,7 +66,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
     }
   }
 
-  "Hit server with multi conditional query" in new Enviroment[Int] {
+  "Hit server with multiple predicates query" in new Enviroment[Int] {
     val products = query { b ⇒
       b.q("article" $gt 2 $lt 40)
       b.collection(PRODUCT)
@@ -74,7 +74,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
     }
 
     val p = for {
-      dbObject ← Resource through (products |> articleIds).channel
+      dbObject ← Resource through (products |> asArticleId).channel
       _ ← dbObject to sink
     } yield ()
 
@@ -91,7 +91,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
     }
 
     val p = for {
-      dbObject ← Resource through (products |> articleIds0).channel
+      dbObject ← Resource through (products |> asArticleIdsStr).channel
       _ ← dbObject.fold1 { _ + "-" + _ } to sink
     } yield ()
 
@@ -108,7 +108,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
     }
 
     val p = for {
-      dbObject ← Resource through (products |> nameTransducer).channel
+      dbObject ← Resource through (products |> asNameStr).channel
       _ ← dbObject to sink
     } yield ()
 
@@ -121,7 +121,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
       b.q(""" { "article": 1 } """)
       b.collection(PRODUCT)
       b.db(DB_NAME)
-    } |> numTransducer
+    } |> asNum
 
     val p = for {
       dbObject ← Resource through (for {
@@ -170,11 +170,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
     } |> categoryIds
 
     val p = for {
-      dbObject ← Resource through
-        (for {
-          n ← prodsWithCategoryIds
-          prod ← categories0(n._2)
-        } yield (prod)).channel
+      dbObject ← Resource through ((for { n ← prodsWithCategoryIds; prod ← categories0(n._2) } yield (prod)).channel)
       _ ← dbObject.foldMap(_.get("name").asInstanceOf[String] + ", ") to sink
     } yield ()
 
@@ -193,7 +189,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
     }
 
     val p = for {
-      dbObject ← Resource through (products |> articleIds).channel
+      dbObject ← Resource through (products |> asArticleId).channel
       _ ← dbObject to sink
     } yield ()
 
