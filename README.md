@@ -4,9 +4,9 @@ Mongo-query-streams
 Mongo query language
 
 Design goals:  
-  * To provide mongo query creation in type safe manner
+  * Provide mongo query creation in type safe manner
   * Write resource safe code
-  * Be able to use compositionality, expressiveness of scalaz-streams as advantage in mongo querying
+  * Use compositionality, expressiveness of scalaz-streams as advantage in mongo querying
   * Consider the result as scalaz streams.
 
 Getting Started
@@ -17,7 +17,7 @@ First, you will need to add the Bintray resolver settings to your SBT file:
 ```
 and
  ```scala
-   libraryDependencies += "org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5"
+   libraryDependencies += "org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5.2"
  ```
 
 Examples
