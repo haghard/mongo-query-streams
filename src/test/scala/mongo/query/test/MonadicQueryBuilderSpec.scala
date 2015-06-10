@@ -14,7 +14,6 @@
 
 package mongo.query.test
 
-import mongo.dsl._
 import java.util.Arrays._
 import com.mongodb.BasicDBObject
 import mongo.mqlparser.MqlParser
@@ -22,7 +21,8 @@ import org.specs2.mutable.Specification
 
 class MonadicQueryBuilderSpec extends Specification {
 
-  import free._
+  import mongo._
+  import dsl._
 
   "monadic query" should {
     "be parsed" in {

@@ -26,9 +26,9 @@ There are several way to create mongo query in type safe manner and treat it lik
 
 Using mongo.dsl._
 ```scala
-    import mongo.query._
-    import mongo.dsl._
-    query { b ⇒
+    import mongo._
+    import query._    
+    create { b ⇒
       b.q(&&("num" $gt 3, "name" $eq "James"))
       b.sort("num" $eq -1)
       b.collection("tmp")
@@ -40,8 +40,8 @@ Using mongo.dsl._
 Using mongo.dsl2_
 ```scala
     import mongo._
-    import mongo.query._
-    import mongo.dsl2._
+    import query._
+    import dsl2._
     val q = Obj($and().op -> List(Obj("num" -> Obj(($gte(), 3), ($lt(), 10))), Obj("name" -> literal("Bauer"))))
     query { b ⇒
       b.q(q.toString)
@@ -53,8 +53,8 @@ Using mongo.dsl2_
 
 Using monadic query composition
 ```scala
-    import mongo.dsl._
-    import free._
+    import mongo._    
+    import dsl._    
     
     val query = for {
     _ ← "producer_num" $eq 1
@@ -65,11 +65,29 @@ Using monadic query composition
     query.toDBObject    
 ```
 
+Using dsl3 you can easy fetch one or batch  
+
+```scala
+    import mongo._
+    import dsl3._
+    import Query._
+    import Interaction._
+  
+    val p = for {
+      _ ← "producer_num" $eq 1
+      q ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
+    } yield q
+  
+  
+    p.one(client, DB_NAME, PRODUCT).attemptRun
+    p.list(client, DB_NAME, PRODUCT).attemptRun  
+```  
+
 Using native query
 
 ```scala
     import mongo.query._
-    query { b ⇒
+    create { b ⇒
       b.q(""" { "article" : 1 } """)
       b.collection("tmp")
       b.db("test_db")
@@ -80,8 +98,9 @@ Using native query
 Here's a basic example how to use processes for simple query:
 
 ```scala
-  import mongo.dsl._
-  import mongo.query._
+  import mongo_  
+  import query._
+  import dsl._
   import scalaz.concurrent.Task
   import scalaz.stream.process._
 
@@ -124,8 +143,8 @@ in exception case.
 Here's a example of how you can do join between to collections:
 
 ```scala
-  import mongo.dsl._
-  import mongo.query._
+  import mongo_  
+  import dsl._
   import scalaz.concurrent.Task
   import scalaz.stream.process._
   import scalaz._
@@ -186,4 +205,4 @@ Generated files can be found in /target/spec2-reports
 
 Status
 ------
-0.5.2 version
+0.6.0 version

@@ -36,7 +36,7 @@ object MongoIntegrationEnv {
 
   private val logger = org.apache.log4j.Logger.getLogger("mongo-streams")
 
-  implicit val executor = Executors.newFixedThreadPool(5, new NamedThreadFactory("mongo-worker"))
+  implicit val executor = Executors.newFixedThreadPool(5, new NamedThreadFactory("mongo-test-worker"))
 
   val asArticleId = lift { obj: DBObject ⇒ obj.get("article").asInstanceOf[Int] }
 
@@ -66,7 +66,7 @@ object MongoIntegrationEnv {
   def LoggerSink(logger: Logger): Sink[Task, String] =
     scalaz.stream.sink.lift[Task, String](o ⇒ Task.delay(logger.debug(s"Result:  $o")))
 
-  private def prepareMockMongo(): (MongoClient, MongoServer) = {
+  private[test] def prepareMockMongo(): (MongoClient, MongoServer) = {
     val server = new MongoServer(new MemoryBackend())
     val serverAddress = server.bind()
     val client = new MongoClient(new ServerAddress(serverAddress))

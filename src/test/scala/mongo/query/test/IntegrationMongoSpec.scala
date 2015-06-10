@@ -14,9 +14,10 @@
 
 package mongo.query.test
 
-import mongo.dsl._
+import mongo._
+import dsl._
 import java.util.Date
-import mongo.query.query
+import mongo.query.create
 import scala.collection.mutable.ArrayBuffer
 import scalaz.concurrent.Task
 import org.apache.log4j.Logger
@@ -56,7 +57,7 @@ trait TestEnviroment[T] extends org.specs2.mutable.After {
 class IntegrationMongoSpec extends Specification with Snippets {
 
   "Hit server with invalid query" in new TestEnviroment[Int] {
-    val q = query { b ⇒
+    val q = create { b ⇒
       b.q(""" { "num :  } """)
       b.db(DB_NAME)
       b.collection(PRODUCT)
@@ -76,7 +77,7 @@ class IntegrationMongoSpec extends Specification with Snippets {
   }
 
   "Hit server with invalid query - missing collection" in new TestEnviroment[Int] {
-    val q = query { b ⇒
+    val q = create { b ⇒
       b.q(""" { "num" : 1 } """)
       b.db(DB_NAME)
     }
@@ -94,7 +95,7 @@ class IntegrationMongoSpec extends Specification with Snippets {
   }
 
   "Hit server with invalid query - invalid sorting" in new TestEnviroment[Int] {
-    val q = query { b ⇒
+    val q = create { b ⇒
       b.q(""" { "num" : 1 } """)
       b.sort(""" { "num } """) //invalid
       b.collection(PRODUCT)
@@ -114,7 +115,7 @@ class IntegrationMongoSpec extends Specification with Snippets {
   }
 
   "Hit server with invalid query - missing db" in new TestEnviroment[Int] {
-    val q = query { b ⇒
+    val q = create { b ⇒
       b.q(""" { "num" : 1 } """)
       b.collection(PRODUCT)
     }
@@ -132,7 +133,7 @@ class IntegrationMongoSpec extends Specification with Snippets {
   }
 
   "Hit server several times with the same query by date" in new TestEnviroment[Int] {
-    val products = query { b ⇒
+    val products = create { b ⇒
       b.q("dt" $gt new Date())
       b.collection(PRODUCT)
       b.db(DB_NAME)
@@ -154,15 +155,12 @@ class IntegrationMongoSpec extends Specification with Snippets {
   }
 
   "Hit server with monadic query to instructions" in new TestEnviroment[String] {
-    import mongo.dsl._
-    import free._
-
     val program = for {
       _ ← "article" $gt 0 $lt 4
       x ← "producer_num" $gt 0
     } yield x
 
-    val products = query { b ⇒
+    val products = create { b ⇒
       b.q(program.toQuery)
       b.collection(PRODUCT)
       b.db(DB_NAME)
@@ -182,15 +180,12 @@ class IntegrationMongoSpec extends Specification with Snippets {
   }
 
   "Hit server with monadic query2" in new TestEnviroment[String] {
-    import mongo.dsl._
-    import free._
-
     val program = for {
       _ ← "article" $gt 0 $lt 4
       x ← "producer_num" $gt 0
     } yield x
 
-    val products = query { b ⇒
+    val products = create { b ⇒
       b.q(program.toDBObject)
       b.collection(PRODUCT)
       b.db(DB_NAME)

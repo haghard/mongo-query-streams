@@ -51,9 +51,10 @@ resolvers ++= Seq(
 )
 
 libraryDependencies ++= Seq(
-    "org.mongodb"       %   "mongo-java-driver" %   MongoDriverVersion withSources(),
+    "org.mongodb"       %   "mongo-java-driver" %   MongoDriverVersion  withSources(),
     "org.scalaz.stream" %%  "scalaz-stream"     %   ScalazStreamVersion withSources(),
     "oncue.ermine"      %%  "ermine-parser"     %   "0.2.1-2",
+    "com.chuusai"       %% "shapeless"          %   "2.2.1",
     "log4j"             %   "log4j"             %   "1.2.14")
 
 libraryDependencies ++= Seq(

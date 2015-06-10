@@ -47,7 +47,7 @@ package object query {
         (g: T ⇒ Task[Process[Task, A]]) ⇒ (task: T) ⇒
           g(task).map { p ⇒
             p.flatMap((a: A) ⇒
-              f(a).channel.flatMap(h ⇒ eval(h(task)).flatMap(i ⇒ i /*identity*/ )))
+              f(a).channel.flatMap(h ⇒ eval(h(task)).flatMap(i ⇒ i)))
           }
       )
     }
@@ -102,13 +102,13 @@ package object query {
 
     def q(q: DBObject): Unit = query = \/-(Option(q))
 
-    def q(qc: mongo.dsl.QueryBuilder): Unit = query = \/-(Option(qc.q))
+    def q(qc: QueryBuilder): Unit = query = \/-(Option(qc.q))
 
     def db(name: String): Unit = dbName = Option(name)
 
     def sort(q: String): Unit = sortQuery = parse(q)
 
-    def sort(query: mongo.dsl.QueryBuilder): Unit = sortQuery = \/-(Option(query.q))
+    def sort(query: QueryBuilder): Unit = sortQuery = \/-(Option(query.q))
 
     def limit(n: Int): Unit = limit = Some(n)
 
@@ -121,7 +121,7 @@ package object query {
     def build(): String \/ QuerySetting
   }
 
-  def query[T](f: MutableBuilder ⇒ Unit)(implicit pool: ExecutorService, q: ToProcess[T]): MongoStream[T, DBObject] = {
+  def create[T](f: MutableBuilder ⇒ Unit)(implicit pool: ExecutorService, q: ToProcess[T]): MongoStream[T, DBObject] = {
     val builder = new MutableBuilder {
       override def build(): String \/ QuerySetting =
         for {

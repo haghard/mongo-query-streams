@@ -14,12 +14,13 @@
 
 package mongo.query.test
 
-import com.mongodb._
-import mongo.query.query
+import mongo.query.create
 
+import mongo._
+import dsl2._
+
+import com.mongodb._
 import org.specs2.mutable._
-import mongo.dsl._
-import mongo.dsl2._
 import org.apache.log4j.Logger
 import scalaz.stream.Process._
 import scala.collection.mutable._
@@ -42,14 +43,14 @@ class IntegrationMongoCleanUpSpec extends Specification {
   private val logger = Logger.getLogger(classOf[IntegrationMongoCleanUpSpec])
 
   private def producers(id: Int) =
-    query { b ⇒
+    create { b ⇒
       b.q("producer_num" $eq id)
       b.collection(PRODUCER)
       b.db(DB_NAME)
     } |> asNameStr
 
   private def categories(e: (String, Buffer[Int])) = {
-    query { b ⇒
+    create { b ⇒
       b.q("category" $in e._2)
       b.sort("name" $eq -1)
       b.collection(CATEGORY)
@@ -58,7 +59,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
   }
 
   private def categories0(ids: Buffer[Int]) = {
-    query { b ⇒
+    create { b ⇒
       b.q("category" $in ids)
       b.sort("name" $eq -1)
       b.collection(CATEGORY)
@@ -67,7 +68,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
   }
 
   "Hit server with multiple predicates query" in new Enviroment[Int] {
-    val products = query { b ⇒
+    val products = create { b ⇒
       b.q("article" $gt 2 $lt 40)
       b.collection(PRODUCT)
       b.db(DB_NAME)
@@ -83,7 +84,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
   }
 
   "Hit server with sorted query with folding results in single value" in new Enviroment[String] {
-    val products = query { b ⇒
+    val products = create { b ⇒
       b.q("article" $gt 2 $lt 40)
       b.sort("article" $eq -1)
       b.collection(PRODUCT)
@@ -100,7 +101,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
   }
 
   "Hit server with native json query" in new Enviroment[String] {
-    val products = query { b ⇒
+    val products = create { b ⇒
       import b._
       q("""{ "article" : 1 } """)
       collection(PRODUCT)
@@ -117,7 +118,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
   }
 
   "Hit server with join ONE-TO-MANY" in new Enviroment[String] {
-    val products = query { b ⇒
+    val products = create { b ⇒
       b.q(""" { "article": 1 } """)
       b.collection(PRODUCT)
       b.db(DB_NAME)
@@ -137,7 +138,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
   }
 
   "Hit server with join ONE-TO-MANY with fold in single value" in new Enviroment[String] {
-    val prodsWithCategoryIds = query { b ⇒
+    val prodsWithCategoryIds = create { b ⇒
       b.q(Obj("article" -> 1).toString)
       b.collection(PRODUCT)
       b.db(DB_NAME)
@@ -160,10 +161,9 @@ class IntegrationMongoCleanUpSpec extends Specification {
   "Hit server with join ONE-TO-MANY with monoid" in new Enviroment[String] {
     import scalaz._
     import Scalaz._
-    import mongo.$in
     implicit val M = scalaz.Monoid[String]
 
-    val prodsWithCategoryIds = query { b ⇒
+    val prodsWithCategoryIds = create { b ⇒
       b.q(Obj("article" -> Obj(($in(), List(1, 2)))).toString)
       b.collection(PRODUCT)
       b.db(DB_NAME)
@@ -180,7 +180,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
   }
 
   "Use pipe and separate transducer for parse result " in new Enviroment[Int] {
-    val products = query { b ⇒
+    val products = create { b ⇒
       b.q(""" { "article": { "$gt" : 0, "$lt" : 4 } }""")
       b.collection(PRODUCT)
       b.db(DB_NAME)
@@ -206,13 +206,13 @@ class IntegrationMongoCleanUpSpec extends Specification {
         pair._2.get("category").asInstanceOf[Int].toString
     })
 
-    val products = query { b ⇒
+    val products = create { b ⇒
       b.q("article" $eq 1)
       b.collection(PRODUCT)
       b.db(DB_NAME)
     }
 
-    val categories = query { b ⇒
+    val categories = create { b ⇒
       b.q("category" $eq 12)
       b.collection(CATEGORY)
       b.db(DB_NAME)
@@ -234,13 +234,13 @@ class IntegrationMongoCleanUpSpec extends Specification {
         b.get("category").asInstanceOf[Int]
     }
 
-    val products = query { b ⇒
+    val products = create { b ⇒
       b.q("article" $in Seq(1, 2, 3))
       b.collection(PRODUCT)
       b.db(DB_NAME)
     }
 
-    val categories = query { b ⇒
+    val categories = create { b ⇒
       b.q("category" $in Seq(12, 13))
       b.collection(CATEGORY)
       b.db(DB_NAME)

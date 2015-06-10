@@ -16,8 +16,67 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.atomic.AtomicInteger
+import scala.collection.JavaConversions._
+
+import com.mongodb.{ DBObject, BasicDBObject }
 
 package object mongo {
+
+  sealed private[mongo] trait QueryBuilder {
+    def q: BasicDBObject
+  }
+
+  private[mongo] trait QueryDsl extends scalaz.syntax.Ops[ComposableQueryFragment] {
+
+    def field: String
+
+    def nested: Option[BasicDBObject]
+
+    private def update[T](v: T, op: String) =
+      Option(nested.fold(new BasicDBObject(op, v))(_.append(op, v)))
+
+    private def update[T](v: java.lang.Iterable[T], op: String) =
+      Option(nested.fold(new BasicDBObject(op, v))(_.append(op, v)))
+
+    def $eq[T: Values](v: T) = EqQueryFragment(new BasicDBObject(field, v))
+    def $gt[T: Values](v: T) = self.copy(field, update(v, "$gt"))
+    def $gte[T: Values](v: T) = self.copy(field, update(v, "$gte"))
+    def $lt[T: Values](v: T) = self.copy(field, update(v, "$lt"))
+    def $lte[T: Values](v: T) = self.copy(field, update(v, "$lte"))
+    def $ne[T: Values](v: T) = self.copy(field, update(v, "$ne"))
+    def $in[T: Values](vs: Iterable[T]) = self.copy(field, update(asJavaIterable(vs), "$in"))
+    def $all[T: Values](vs: Iterable[T]) = self.copy(field, update(asJavaIterable(vs), "$all"))
+    def $nin[T: Values](vs: Iterable[T]) = self.copy(field, update(asJavaIterable(vs), "$nin"))
+  }
+
+  private[mongo] case class EqQueryFragment(override val q: BasicDBObject) extends QueryBuilder
+
+  private[mongo] case class ComposableQueryFragment(val field: String, val nested: Option[BasicDBObject]) extends QueryDsl with QueryBuilder {
+    override val self = this
+    override def q = new BasicDBObject(field, nested.fold(new BasicDBObject())(x ⇒ x))
+    override def toString() = q.toString
+  }
+
+  private[mongo] case class AndQueryFragment(cs: TraversableOnce[QueryBuilder]) extends QueryBuilder {
+    override def q = new BasicDBObject("$and", cs.foldLeft(new java.util.ArrayList[DBObject]()) { (arr, c) ⇒
+      arr.add(c.q)
+      arr
+    })
+    override def toString() = q.toString
+  }
+
+  private[mongo] case class OrQueryFragment(cs: TraversableOnce[QueryBuilder]) extends QueryBuilder {
+    override def q = new BasicDBObject("$or", cs.foldLeft(new java.util.ArrayList[DBObject]()) { (arr, c) ⇒
+      arr.add(c.q)
+      arr
+    })
+    override def toString() = q.toString
+  }
+
+  implicit def f2b(f: String) = ComposableQueryFragment(f, None)
+
+  def &&(bs: QueryBuilder*) = AndQueryFragment(bs)
+  def ||(bs: QueryBuilder*) = OrQueryFragment(bs)
 
   //Supported values
   sealed trait Values[T]

@@ -18,7 +18,6 @@ import java.util.Arrays._
 import java.util.Date
 import MongoIntegrationEnv.executor
 import com.mongodb.BasicDBObject
-import mongo.query.query
 import org.specs2.mutable.Specification
 import org.specs2.specification.Snippets
 
@@ -30,8 +29,9 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
   * Single selector query with eq operator ${
     snippet {
-      import mongo.dsl._
-      query { b ⇒
+      import mongo._
+      import query._
+      create { b ⇒
         b.q("name" $eq "Taller")
         b.collection("tmp")
       }
@@ -42,8 +42,9 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
   * Single selector query with gt operator ${
     snippet {
-      import mongo.dsl._
-      query { b ⇒
+      import mongo._
+      import query._
+      create { b ⇒
         b.q("num" $gt 3)
         b.collection("tmp")
       }
@@ -55,8 +56,9 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
   * Single selector query with gte operator ${
     snippet {
-      import mongo.dsl._
-      query { b ⇒
+      import mongo._
+      import query._
+      create { b ⇒
         b.q("num" $gte 79.8)
         b.collection("tmp")
       }
@@ -67,8 +69,9 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Single selector query with lt operator ${
     snippet {
-      import mongo.dsl._
-      query { b ⇒
+      import mongo._
+      import query._
+      create { b ⇒
         b.q("num" $lt 199.78)
         b.collection("tmp")
       }
@@ -80,8 +83,9 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Single selector query with lte operator ${
     snippet {
-      import mongo.dsl._
-      query { b ⇒
+      import mongo._
+      import query._
+      create { b ⇒
         b.q("num" $lte 19.98)
         b.collection("tmp")
       }
@@ -92,8 +96,9 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Single selector query with ne operator ${
     snippet {
-      import mongo.dsl._
-      query { b ⇒
+      import mongo._
+      import query._
+      create { b ⇒
         b.q("flag" $ne true)
         b.collection("tmp")
       }
@@ -104,8 +109,9 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Single selector query with in operator ${
     snippet {
-      import mongo.dsl._
-      query { b ⇒
+      import mongo._
+      import query._
+      create { b ⇒
         b.q("num" $in Seq(1, 2, 4))
         b.collection("tmp")
       }
@@ -116,8 +122,9 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Single selector query with all operator ${
     snippet {
-      import mongo.dsl._
-      query { b ⇒
+      import mongo._
+      import query._
+      create { b ⇒
         b.q("num" $all Seq(1, 2, 4))
         b.collection("tmp")
       }
@@ -128,8 +135,9 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Single selector query with nin operator ${
     snippet {
-      import mongo.dsl._
-      query { b ⇒
+      import mongo._
+      import query._
+      create { b ⇒
         b.q("num" $nin Seq(1, 2, 4))
         b.collection("tmp")
       }
@@ -141,8 +149,9 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Single selector with nested conditions ${
     snippet {
-      import mongo.dsl._
-      query { b ⇒
+      import mongo._
+      import query._
+      create { b ⇒
         b.q("num" $gt 3 $lt 20 $nin Seq(11, 12))
         b.collection("tmp")
       }
@@ -153,8 +162,9 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Logical AND query ${
     snippet {
-      import mongo.dsl._
-      query { b ⇒
+      import mongo._
+      import query._
+      create { b ⇒
         b.q(&&("num" $gt 3, "name" $eq "James"))
         b.collection("tmp")
       }
@@ -165,8 +175,9 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Logical OR query ${
     snippet {
-      import mongo.dsl._
-      query { b ⇒
+      import mongo._
+      import query._
+      create { b ⇒
         b.q(||("num" $lt 9.78, "num2" $gte 89.1))
         b.collection("tmp")
       }
@@ -177,8 +188,9 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Logical AND query with complex inner queries ${
     snippet {
-      import mongo.dsl._
-      query { b ⇒
+      import mongo._
+      import query._
+      create { b ⇒
         b.q(||("num" $gte 3 $lt 10, "name" $eq "Jack Bauer"))
         b.collection("tmp")
       }
@@ -189,8 +201,9 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
  * Logical OR query with nested AND's ${
     snippet {
-      import mongo.dsl._
-      query { b ⇒
+      import mongo._
+      import query._
+      create { b ⇒
         b.q(||(&&("num" $gte 178 $lte 199, "name" $eq "Jack Bauer"), &&("num" $gt 78 $lt 99, "name" $eq "James Bond")))
         b.collection("tmp")
       }
@@ -200,8 +213,9 @@ class DslQueryBuilderSpec extends Specification with Snippets {
  ${body.verifyDt}
  * Single selector query with date argument ${
     snippet {
-      import mongo.dsl._
-      query { b ⇒
+      import mongo._
+      import query._
+      create { b ⇒
         b.q("date" $gt new Date())
         b.collection("tmp")
       }
@@ -211,8 +225,9 @@ class DslQueryBuilderSpec extends Specification with Snippets {
  ${body.verifyOrAnd}
   * Single selector query with Or and nested AND's ${
     snippet {
-      import mongo.dsl._
-      query { b ⇒
+      import mongo._
+      import query._
+      create { b ⇒
         b.q(||(&&("num" $gte 178 $lte 199, "name" $eq "Jack Bauer"), &&("num" $gt 78 $lt 99, "name" $eq "James Bond")))
         b.collection("tmp")
       }
@@ -222,8 +237,8 @@ class DslQueryBuilderSpec extends Specification with Snippets {
   ${body.verifyMonadicQuery}
   * Monadic query ${
     snippet {
-      import mongo.dsl._
-      import free._
+      import mongo._
+      import dsl._
       for {
         _ ← "producer_num" $eq 1
         x ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
@@ -234,98 +249,97 @@ class DslQueryBuilderSpec extends Specification with Snippets {
   """
   def body = new {
 
-    import mongo.dsl._
+    import mongo._
+    import query._
+    import dsl._
     import MongoIntegrationEnv.executor
 
     def verifyEq =
-      query { b ⇒
+      create { b ⇒
         b.q("name" $eq "Taller")
         b.collection("tmp")
         b.db("db")
       } mustNotEqual null
 
     def verifyGt =
-      query { b ⇒
+      create { b ⇒
         import b._
         q("num" $gt 3)
         collection("tmp")
       } mustNotEqual null
 
-    def verifyGte = query { b ⇒
+    def verifyGte = create { b ⇒
       import b._
       q("num" $gte 79.8)
       collection("tmp")
     } mustNotEqual null
 
-    def verifyLt = query { b ⇒
+    def verifyLt = create { b ⇒
       import b._
       q("num" $lt 199.78)
       collection("tmp")
     } mustNotEqual null
 
-    def verifyLte = query { b ⇒
+    def verifyLte = create { b ⇒
       import b._
       q(("num" $lt 19.98))
       collection("tmp")
     } mustNotEqual null
 
-    def verifyNe = query { b ⇒
+    def verifyNe = create { b ⇒
       import b._
       q(("flag" $ne true))
       collection("tmp")
     } mustNotEqual null
 
-    def verifyIn = query { b ⇒
+    def verifyIn = create { b ⇒
       b.q(("num" $in Seq(1, 2, 4)))
       b.collection("tmp")
     } mustNotEqual null
 
-    def verifyAll = query { b ⇒
+    def verifyAll = create { b ⇒
       b.q(("num" $all Seq(1, 2, 4)))
       b.collection("tmp")
     } mustNotEqual null
 
-    def verifyNin = query { b ⇒
+    def verifyNin = create { b ⇒
       b.q(("num" $nin Seq(1, 2, 4)))
       b.collection("tmp")
     } mustNotEqual null
 
-    def verifyNested = query { b ⇒
+    def verifyNested = create { b ⇒
       b.q(("num" $gt 3 $lt 20 $nin Seq(11, 12)))
       b.collection("tmp")
     } mustNotEqual null
 
-    def verifyAND = query { b ⇒
+    def verifyAND = create { b ⇒
       b.q(&&("num" $gt 13, "name" $eq "James"))
       b.collection("tmp")
     } mustNotEqual null
 
-    def verifyOR = query { b ⇒
+    def verifyOR = create { b ⇒
       b.q(||("num" $lt 9.78, "num2" $gte 89.1))
       b.collection("tmp")
     } mustNotEqual null
 
-    def verifyAND2 = query { b ⇒
+    def verifyAND2 = create { b ⇒
       b.q(&&("num" $gte 3 $lt 10, "name" $eq "Jack Bauer"))
       b.collection("tmp")
     } mustNotEqual null
 
-    def verifyOrAnd = query { b ⇒
+    def verifyOrAnd = create { b ⇒
       b.q(||(&&("num" $gte 178 $lte 199, "name" $eq "Jack Bauer"), &&("num" $gt 78 $lt 99, "name" $eq "James Bond")))
       b.collection("tmp")
     } mustNotEqual null
 
-    def verifyDt = query { b ⇒
+    def verifyDt = create { b ⇒
       b.q("date" $gt new Date())
       b.collection("tmp")
     } mustNotEqual null
 
-    import free._
-
     def verifyMonadicQuery = {
       val expected = new BasicDBObject("article",
         new BasicDBObject("$gt", 0).append("$lt", 6).append("$nin", asList(4, 5))).append("producer_num", 1)
-
       (for {
         _ ← "producer_num" $eq 1
         x ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
