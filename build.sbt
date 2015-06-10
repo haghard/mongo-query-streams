@@ -6,7 +6,7 @@ organization := "org.mongo.scalaz"
 
 name := "mongo-query-streams"
 
-version := "0.5.3-snapshot"
+version := "0.6.0-snapshot"
 
 scalaVersion := "2.11.6"
 
@@ -54,7 +54,7 @@ libraryDependencies ++= Seq(
     "org.mongodb"       %   "mongo-java-driver" %   MongoDriverVersion  withSources(),
     "org.scalaz.stream" %%  "scalaz-stream"     %   ScalazStreamVersion withSources(),
     "oncue.ermine"      %%  "ermine-parser"     %   "0.2.1-2",
-    "com.chuusai"       %% "shapeless"          %   "2.2.1",
+    "com.chuusai"       %%  "shapeless"         %   "2.2.1",
     "log4j"             %   "log4j"             %   "1.2.14")
 
 libraryDependencies ++= Seq(
