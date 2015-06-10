@@ -43,7 +43,7 @@ Using mongo.dsl2_
     import query._
     import dsl2._
     val q = Obj($and().op -> List(Obj("num" -> Obj(($gte(), 3), ($lt(), 10))), Obj("name" -> literal("Bauer"))))
-    query { b ⇒
+    create { b ⇒
       b.q(q.toString)
       b.collection("tmp")
       b.db("test_db")
@@ -114,7 +114,7 @@ Here's a basic example how to use processes for simple query:
   implicit val mongoExecutor = 
     Executors.newFixedThreadPool(5, new NamedThreadFactory("mongo-worker"))
 
-  val products = query { b ⇒
+  val products = create { b ⇒
     b.q("article" $gt 2 $lt 40)
     b.collection(PRODUCT)
     b.db("test_db")
@@ -140,7 +140,7 @@ fetch records from cursor, close the cursor when he is exhausted). Cursor will b
 in exception case.
 
 
-Here's a example of how you can do join between to collections:
+Here's a example of how you can do join between two collections:
 
 ```scala
   import mongo_  
@@ -157,7 +157,7 @@ Here's a example of how you can do join between to collections:
   val Resource = eval(Task.delay(client))
 
   def categories(e: (String, Buffer[Int])) = {
-    query { b ⇒
+    create { b ⇒
       b.q("category" $in e._2)
       b.sort("name" $eq -1)
       b.collection(CATEGORY)
@@ -165,7 +165,7 @@ Here's a example of how you can do join between to collections:
     }
   }
     
-  val prodsWithCatIds = query { b ⇒
+  val prodsWithCatIds = create { b ⇒
     b.q(Obj("article" -> 1).toString)
     b.collection(PRODUCT)
     b.db(DB_NAME)
