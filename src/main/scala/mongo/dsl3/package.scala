@@ -30,6 +30,9 @@ import scala.collection.JavaConversions.mapAsScalaMap
 
 package object dsl3 { outer ⇒
 
+  import scalaz.stream.Process
+  type ScalazProcess[Out] = Process[Task, Out]
+
   object FetchMode extends Enumeration {
     type Type = Value
     val One, Batch = Value
@@ -121,7 +124,6 @@ package object dsl3 { outer ⇒
     type InteractionApp[T] = MongoInteractionOp[T] :+: Log[T] :+: Query.FreeApp[T] :+: CNil
     type CoyoApp[T] = Coyoneda[InteractionApp, T]
     type FreeApp[T] = scalaz.Free.FreeC[InteractionApp, T]
-    type ScalazP[Out] = Process[Task, Out]
 
     val BatchPrefix = "_id"
 
@@ -209,8 +211,8 @@ package object dsl3 { outer ⇒
     }
 
     object StreamerFactory {
-      implicit object ProcStreamer extends StreamerFactory[ScalazP] {
-        override def create[T](q: BasicDBObject, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): ScalazP[T] = {
+      implicit object ProcStreamer extends StreamerFactory[ScalazProcess] {
+        override def create[T](q: BasicDBObject, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): ScalazProcess[T] = {
           io.resource(Task(client.getDB(db).getCollection(coll).find(q)))(c ⇒ Task(c.close)) { c ⇒
             Task {
               if (c.hasNext) {

@@ -90,8 +90,7 @@ class IntegrationMongoDsl3Spec extends Specification {
     val buf = Buffer.empty[BasicDBObject]
     val sink = io.fillBuffer(buf)
 
-    val out = (q.stream[({ type λ[x] = Process[Task, x] })#λ](client, DB_NAME, PRODUCT)
-      to sink).run.attemptRun
+    val out = (q.stream[ScalazProcess](client, DB_NAME, PRODUCT) to sink).run.attemptRun
 
     out should be equalTo \/-(())
     Records === buf.size
