@@ -25,7 +25,7 @@ import org.specs2.mutable.Specification
 import scala.collection.mutable.Buffer
 import scalaz.\/-
 import scalaz.concurrent.Task
-import scalaz.stream.{ io, Process }
+import scalaz.stream.io
 
 trait Dsl3Enviroment extends org.specs2.mutable.After {
   val logger = org.apache.log4j.Logger.getLogger("DSL3-Enviroment")
