@@ -18,6 +18,7 @@ import java.util.concurrent.ExecutorService
 
 import com.mongodb.{ DBCursor, DBObject, BasicDBObject, MongoClient }
 import mongo.dsl3.Interaction.NonEmptyResult
+import mongo.query.MongoStream
 import rx.lang.scala.Producer
 import scala.annotation.tailrec
 import scala.collection.JavaConversions._
@@ -217,7 +218,7 @@ package object dsl3 { outer ⇒
             Task {
               if (c.hasNext) {
                 val r = c.next
-                logger.debug(s"fetch $r")
+                //logger.debug(s"fetch $r")
                 r.asInstanceOf[T]
               } else {
                 throw Cause.Terminated(Cause.End)
@@ -243,7 +244,7 @@ package object dsl3 { outer ⇒
                 if (n > 0) {
                   if (cursor.forall(_.hasNext)) {
                     val r = cursor.get.next().asInstanceOf[T]
-                    logger.debug(s"fetch $r")
+                    //logger.debug(s"fetch $r")
                     subscriber.onNext(r)
                     go(n - 1)
                   } else subscriber.onCompleted()
@@ -251,7 +252,7 @@ package object dsl3 { outer ⇒
               }
 
               override def request(n: Long): Unit = {
-                logger.debug(s"request $n")
+                //logger.debug(s"request $n")
                 Task(go(n))(pool).runAsync(_.fold((ex ⇒ subscriber.onError(ex)), (_ ⇒ ())))
               }
             })
@@ -270,9 +271,13 @@ package object dsl3 { outer ⇒
       Task(outer.Interaction.program(self, client, db, coll, FetchMode.Batch)
         .foldMap(outer.Interaction.Trampolined compose outer.Interaction.intInterpreterCoyo).run)(pool)
 
-    def stream[M[_]: scalaz.Monad](client: MongoClient, db: String, coll: String)(implicit c: outer.Interaction.StreamerFactory[M], pool: ExecutorService): M[BasicDBObject] = {
+    def stream[M[_]: scalaz.Monad](client: MongoClient, db: String, coll: String)(implicit c: outer.Interaction.StreamerFactory[M], pool: ExecutorService): M[BasicDBObject] =
       c.create((scalaz.Free.runFC[Query.StatementOp, QueryS, BasicDBObject](self)(Query.QueryInterpreterS)).run(outer.Query.init)._1,
         client, db, coll)
-    }
+
+    def mongoStream(db: String, coll: String): query.MongoStream[MongoClient, BasicDBObject]  =
+      MongoStream(Process.eval(Task.now { client: MongoClient ⇒
+        Task(self.stream[ScalazProcess](client, db, coll).onComplete(Process.eval(Task.delay(client.close())).drain))
+      }))
   }
 }

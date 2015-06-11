@@ -28,14 +28,14 @@ package object query {
 
   type MongoChannel[A] = Channel[Task, A, Process[Task, DBObject]]
 
-  private[query] case class QuerySetting(q: DBObject, db: String, collName: String, sortQuery: Option[DBObject],
+  private[mongo] case class QuerySetting(q: DBObject, db: String, collName: String, sortQuery: Option[DBObject],
                                          limit: Option[Int], skip: Option[Int], maxTimeMS: Option[Long])
 
-  private[query] trait ToProcess[T] {
+  private[mongo] trait ToProcess[T] {
     def toProcess(arg: String \/ QuerySetting)(implicit pool: ExecutorService): MongoStream[T, DBObject]
   }
 
-  private[query] case class MongoStream[T, A](val channel: Channel[Task, T, Process[Task, A]]) {
+  private[mongo] case class MongoStream[T, A](val channel: Channel[Task, T, Process[Task, A]]) {
 
     private def resultMap[B](f: Process[Task, A] ⇒ Process[Task, B]): MongoStream[T, B] =
       MongoStream(channel.map(r ⇒ r andThen (pt ⇒ pt.map(p ⇒ f(p)))))

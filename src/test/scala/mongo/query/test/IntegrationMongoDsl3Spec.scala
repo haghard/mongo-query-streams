@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import com.mongodb.{ BasicDBObject, DBObject, MongoClient }
 import de.bwaldvogel.mongo.MongoServer
+import mongo.query.MongoStream
 import mongo.query.test.MongoIntegrationEnv._
 import org.specs2.mutable.Specification
 
@@ -89,6 +90,11 @@ class IntegrationMongoDsl3Spec extends Specification {
 
     val buf = Buffer.empty[BasicDBObject]
     val sink = io.fillBuffer(buf)
+
+
+    MongoStream(scalaz.stream.Process.eval(Task.now { client: MongoClient ⇒
+      Task { q.stream[ScalazProcess](client, DB_NAME, PRODUCT) }
+    })).|>()
 
     val out = (q.stream[ScalazProcess](client, DB_NAME, PRODUCT) to sink).run.attemptRun
 
