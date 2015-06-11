@@ -13,13 +13,11 @@ Getting Started
 ===================
 First, you will need to add the Bintray resolver settings to your SBT file:
 ```scala
-    resolvers += "bintray-repo" at "http://dl.bintray.com/haghard/releases"
-    resolvers += "bintray-repo" at "http://dl.bintray.com/haghard/snapshots"
+    resolvers += "bintray-repo" at "http://dl.bintray.com/haghard/releases"    
 ```
 and
  ```scala
-   libraryDependencies += "org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5.2"
-   libraryDependencies += "org.mongo.scalaz"    %% "mongo-query-streams" %  "0.6.0-snapshot"
+   libraryDependencies += "org.mongo.scalaz"    %% "mongo-query-streams" %  "0.6.1"   
  ```
 
 Examples
@@ -207,5 +205,4 @@ Generated files can be found in /target/spec2-reports
 
 Status
 ------
-0.5.2 version
-0.6.0-snapshot
+0.6.1 version
