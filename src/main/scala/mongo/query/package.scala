@@ -31,11 +31,12 @@ package object query {
   private[mongo] case class QuerySetting(q: DBObject, db: String, collName: String, sortQuery: Option[DBObject],
                                          limit: Option[Int], skip: Option[Int], maxTimeMS: Option[Long])
 
-  private[mongo] trait ToProcess[T] {
-    def toProcess(arg: String \/ QuerySetting)(implicit pool: ExecutorService): MongoStream[T, DBObject]
+  private[mongo] trait MStreamFactory[T] {
+    def createMStream(arg: String \/ QuerySetting)(implicit pool: ExecutorService): MongoStream[T, DBObject]
   }
 
   private[mongo] case class MongoStream[T, A](val channel: Channel[Task, T, Process[Task, A]]) {
+    import scalaz.stream.process1._
 
     private def resultMap[B](f: Process[Task, A] ⇒ Process[Task, B]): MongoStream[T, B] =
       MongoStream(channel.map(r ⇒ r andThen (pt ⇒ pt.map(p ⇒ f(p)))))
@@ -78,6 +79,21 @@ package object query {
     }
 
     def zip[B](stream: MongoStream[T, B]): MongoStream[T, (A, B)] = zipWith(stream)((_, _))
+
+    /**
+     * @param name
+     * @param t
+     * @tparam B
+     * @return
+     */
+    def column[B](name: String): MongoStream[T, B] = {
+      pipe(lift { record ⇒
+        record match {
+          case r: DBObject ⇒ r.get(name).asInstanceOf[B]
+          case other       ⇒ throw new Exception(s"DBObject expected but found ${other.getClass.getName}")
+        }
+      })
+    }
   }
 
   private[query] trait MutableBuilder {
@@ -121,7 +137,7 @@ package object query {
     def build(): String \/ QuerySetting
   }
 
-  def create[T](f: MutableBuilder ⇒ Unit)(implicit pool: ExecutorService, q: ToProcess[T]): MongoStream[T, DBObject] = {
+  def create[T](f: MutableBuilder ⇒ Unit)(implicit pool: ExecutorService, q: MStreamFactory[T]): MongoStream[T, DBObject] = {
     val builder = new MutableBuilder {
       override def build(): String \/ QuerySetting =
         for {
@@ -133,12 +149,12 @@ package object query {
         } yield QuerySetting(q, db, c, s, limit, skip, maxTimeMS)
     }
     f(builder)
-    q toProcess builder.build
+    q createMStream builder.build
   }
 
   //default
-  implicit object default extends ToProcess[MongoClient] {
-    override def toProcess(arg: String \/ QuerySetting)(implicit pool: ExecutorService): MongoStream[MongoClient, DBObject] = {
+  implicit object default extends MStreamFactory[MongoClient] {
+    override def createMStream(arg: String \/ QuerySetting)(implicit pool: ExecutorService): MongoStream[MongoClient, DBObject] = {
       arg match {
         case \/-(set) ⇒
           MongoStream(eval(Task now { client: MongoClient ⇒

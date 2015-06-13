@@ -19,11 +19,10 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import com.mongodb.{ BasicDBObject, DBObject, MongoClient }
 import de.bwaldvogel.mongo.MongoServer
-import mongo.query.MongoStream
 import mongo.query.test.MongoIntegrationEnv._
 import org.specs2.mutable.Specification
 
-import scala.collection.mutable.Buffer
+import scala.collection.mutable.{ ArrayBuffer, Buffer }
 import scalaz.\/-
 import scalaz.concurrent.Task
 import scalaz.stream.io
@@ -44,6 +43,8 @@ trait Dsl3Enviroment extends org.specs2.mutable.After {
     client.close
     server.shutdown
   }
+
+  def EnvLogger(): scalaz.stream.Sink[Task, String] = MongoIntegrationEnv.LoggerSink(logger)
 }
 
 class IntegrationMongoDsl3Spec extends Specification {
@@ -53,6 +54,7 @@ class IntegrationMongoDsl3Spec extends Specification {
   import Interaction._
   import MongoIntegrationEnv._
   import StreamerFactory._
+  import scalaz.stream.Process
 
   "Build query and perform findOne" in new Dsl3Enviroment {
     initMongo
@@ -83,56 +85,104 @@ class IntegrationMongoDsl3Spec extends Specification {
     r.get(BatchPrefix).asInstanceOf[java.util.List[DBObject]].size() === 2
   }
 
+  val ExpectedSize = 11
+
   "Build query and perform streaming using scalaz.Process" in new Dsl3Enviroment {
     initMongo
-    val Records = 2
-    val q = for { ex ← "producer_num" $gte 1 $lt 5 } yield ex
+    val q = for { ex ← "value" $gte 0 $lt 11 } yield ex
 
     val buf = Buffer.empty[BasicDBObject]
     val sink = io.fillBuffer(buf)
 
-
-    MongoStream(scalaz.stream.Process.eval(Task.now { client: MongoClient ⇒
-      Task { q.stream[ScalazProcess](client, DB_NAME, PRODUCT) }
-    })).|>()
-
-    val out = (q.stream[ScalazProcess](client, DB_NAME, PRODUCT) to sink).run.attemptRun
-
+    val out = (q.stream[ScalazProcess](client, DB_NAME, STREAMS) to sink).run.attemptRun
     out should be equalTo \/-(())
-    Records === buf.size
+    ExpectedSize === buf.size
   }
 
   "Build query and perform streaming using Observable" in new Dsl3Enviroment {
+
     import rx.lang.scala.Observable
     import rx.lang.scala.Subscriber
     initMongo
 
-    val Records = 2
+    val batchSize = 3
     var responses = new AtomicInteger(0)
     val c = new CountDownLatch(1)
 
-    val q = for { ex ← "producer_num" $gte 1 $lt 5 } yield ex
+    val q = for { ex ← "value" $gte 0 $lt 11 } yield ex
 
+    //Add more records for steaming example
     val s = new Subscriber[BasicDBObject] {
-      override def onStart(): Unit = request(1)
+      override def onStart(): Unit = request(batchSize)
       override def onNext(n: BasicDBObject): Unit = {
         logger.info(s"receive $n")
         responses.incrementAndGet()
-        request(1)
+        if (responses.get() % batchSize == 0) {
+          request(batchSize)
+        }
       }
+
       override def onError(e: Throwable): Unit = {
         logger.info("OnError: " + e.getMessage)
         c.countDown()
       }
+
       override def onCompleted(): Unit = {
         logger.info("OnCompile")
         c.countDown()
       }
     }
 
-    Task(q.stream[Observable](client, DB_NAME, PRODUCT).subscribe(s))(executor) runAsync (_ ⇒ ())
+    Task(q.stream[Observable](client, DB_NAME, STREAMS).subscribe(s))(executor) runAsync (_ ⇒ ())
 
     c.await()
-    responses.get() === Records
+    responses.get() === ExpectedSize
+  }
+
+  "Build query and perform streaming using mongoStream for compose" in new Dsl3Enviroment {
+    initMongo
+
+    val field = "value"
+    val query = for { ex ← field $gte 0 $lt 11 } yield ex
+
+    val buffer = Buffer.empty[Int]
+    val Sink = io.fillBuffer(buffer)
+
+    val p = (for {
+      element ← Process.eval(Task.delay(client))
+        .through(query.mongoStream(DB_NAME, STREAMS).column[Int](field).channel)
+      _ ← element to Sink
+    } yield ())
+
+    p.onFailure(th ⇒ Process.eval(Task.delay(logger.info(s"Exception: ${th.getMessage}"))))
+      .onComplete(Process.eval(Task.delay(logger.info(s"Interaction has been completed"))))
+      .runLog.run
+
+    buffer.size === 11
+  }
+
+  "One to many with mongoStream" in new Dsl3Enviroment {
+    initMongo
+
+    val buffer = Buffer.empty[String]
+    val Sink = io.fillBuffer(buffer)
+
+    val q = for { q ← "article" $eq 1 } yield q
+    def nested(id: Int) = for { q ← "producer_num" $eq id } yield q
+
+    val p = for {
+      element ← Process.eval(Task.delay(client)) through (for {
+        n ← q.mongoStream(DB_NAME, PRODUCT).column[Int]("producer_num")
+        p ← nested(n).mongoStream(DB_NAME, PRODUCER).column[String]("name")
+      } yield p).channel
+      _ ← element to Sink
+    } yield ()
+
+    p.onFailure(th ⇒ Process.eval(Task.delay(logger.info(s"Exception: ${th.getMessage}"))))
+      .onComplete(Process.eval(Task.delay(logger.info(s"Interaction has been completed"))))
+      .runLog.run
+
+    buffer.size === 2
+    buffer === ArrayBuffer("Puma", "Reebok")
   }
 }

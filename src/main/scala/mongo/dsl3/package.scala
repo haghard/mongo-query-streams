@@ -218,7 +218,7 @@ package object dsl3 { outer ⇒
             Task {
               if (c.hasNext) {
                 val r = c.next
-                //logger.debug(s"fetch $r")
+                logger.debug(s"fetch $r")
                 r.asInstanceOf[T]
               } else {
                 throw Cause.Terminated(Cause.End)
@@ -244,7 +244,7 @@ package object dsl3 { outer ⇒
                 if (n > 0) {
                   if (cursor.forall(_.hasNext)) {
                     val r = cursor.get.next().asInstanceOf[T]
-                    //logger.debug(s"fetch $r")
+                    logger.debug(s"fetch $r")
                     subscriber.onNext(r)
                     go(n - 1)
                   } else subscriber.onCompleted()
@@ -252,7 +252,7 @@ package object dsl3 { outer ⇒
               }
 
               override def request(n: Long): Unit = {
-                //logger.debug(s"request $n")
+                logger.debug(s"request $n")
                 Task(go(n))(pool).runAsync(_.fold((ex ⇒ subscriber.onError(ex)), (_ ⇒ ())))
               }
             })
@@ -275,9 +275,9 @@ package object dsl3 { outer ⇒
       c.create((scalaz.Free.runFC[Query.StatementOp, QueryS, BasicDBObject](self)(Query.QueryInterpreterS)).run(outer.Query.init)._1,
         client, db, coll)
 
-    def mongoStream(db: String, coll: String): query.MongoStream[MongoClient, BasicDBObject]  =
+    def mongoStream(db: String, coll: String)(implicit pool: ExecutorService): query.MongoStream[MongoClient, BasicDBObject] =
       MongoStream(Process.eval(Task.now { client: MongoClient ⇒
-        Task(self.stream[ScalazProcess](client, db, coll).onComplete(Process.eval(Task.delay(client.close())).drain))
+        Task(self.stream[ScalazProcess](client, db, coll)) //.onComplete(Process.eval(Task.delay(client.close())).drain))
       }))
   }
 }

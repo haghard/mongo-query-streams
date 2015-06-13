@@ -21,7 +21,7 @@ import java.util.concurrent.{ TimeUnit, ExecutorService, Executors }
 import de.bwaldvogel.mongo.MongoServer
 import de.bwaldvogel.mongo.backend.memory.MemoryBackend
 import mongo.{ query, NamedThreadFactory }
-import mongo.query.{ MongoStream, ToProcess, QuerySetting }
+import mongo.query.{ MongoStream, MStreamFactory, QuerySetting }
 import org.apache.log4j.Logger
 
 import scala.collection.JavaConversions._
@@ -57,6 +57,7 @@ object MongoIntegrationEnv {
   val PRODUCT = "product"
   val CATEGORY = "category"
   val PRODUCER = "producer"
+  val STREAMS = "streams"
 
   def sinkWithBuffer[T] = {
     val buffer: Buffer[T] = Buffer.empty
@@ -71,6 +72,11 @@ object MongoIntegrationEnv {
     val serverAddress = server.bind()
     val client = new MongoClient(new ServerAddress(serverAddress))
     val products = client.getDB(DB_NAME).getCollection(PRODUCT)
+    val stream = client.getDB(DB_NAME).getCollection(STREAMS)
+
+    for (i ← 0 to 10) {
+      stream.insert(new BasicDBObject("value", i))
+    }
 
     products.insert(new BasicDBObject("article", ids(0)).append("name", "Extra Large Wheel Barrow")
       .append("producer_num", 1)
@@ -125,8 +131,8 @@ object MongoIntegrationEnv {
   /**
    * useful for test case
    */
-  implicit object TestCaseScope extends ToProcess[DB] {
-    override def toProcess(arg: String \/ QuerySetting)(implicit pool: ExecutorService): MongoStream[DB, DBObject] = {
+  implicit object TestCaseScope extends MStreamFactory[DB] {
+    override def createMStream(arg: String \/ QuerySetting)(implicit pool: ExecutorService): MongoStream[DB, DBObject] = {
       arg match {
         case \/-(set) ⇒
           query.MongoStream {
