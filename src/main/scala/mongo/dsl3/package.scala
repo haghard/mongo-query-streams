@@ -15,14 +15,11 @@
 package mongo
 
 import java.util.concurrent.ExecutorService
-
 import com.mongodb.{ DBCursor, DBObject, BasicDBObject, MongoClient }
-import mongo.dsl3.Interaction.NonEmptyResult
 import mongo.query.MongoStream
-import rx.lang.scala.Producer
 import scala.annotation.tailrec
 import scala.collection.JavaConversions._
-import scala.util.Try
+import scala.reflect.ClassTag
 import scalaz.concurrent.Task
 import scalaz.{ Free, Coyoneda, \/, -\/, \/-, Trampoline, ~> }
 
@@ -32,7 +29,8 @@ import scala.collection.JavaConversions.mapAsScalaMap
 package object dsl3 { outer ⇒
 
   import scalaz.stream.Process
-  type ScalazProcess[Out] = Process[Task, Out]
+  type SProc[Out] = Process[Task, Out]
+  type MStream[Out] = MongoStream[MongoClient, Out]
 
   object FetchMode extends Enumeration {
     type Type = Value
@@ -97,7 +95,6 @@ package object dsl3 { outer ⇒
   }
 
   object Interaction {
-
     import Free._
     import shapeless._
     import shapeless.CNil
@@ -105,13 +102,9 @@ package object dsl3 { outer ⇒
     import CoyonedaShapless._
     import java.util.concurrent.ExecutorService
     import scalaz.stream._
-    import scalaz.stream.Process
-    import rx.lang.scala.Observable
 
     sealed trait DBError
-
     case object NotFound extends DBError
-
     case class ReadError(msg: String) extends DBError
 
     type NonEmptyResult = DBError \/ DBObject
@@ -206,78 +199,136 @@ package object dsl3 { outer ⇒
       def create[T](q: BasicDBObject, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): M[T]
     }
 
-    implicit val M = new scalaz.Monad[Observable]() {
-      override def point[A](a: ⇒ A): Observable[A] = Observable.just(a)
-      override def bind[A, B](fa: Observable[A])(f: (A) ⇒ Observable[B]): Observable[B] = fa flatMap f
-    }
-
     object StreamerFactory {
-      implicit object ProcStreamer extends StreamerFactory[ScalazProcess] {
-        override def create[T](q: BasicDBObject, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): ScalazProcess[T] = {
-          io.resource(Task(client.getDB(db).getCollection(coll).find(q)))(c ⇒ Task(c.close)) { c ⇒
-            Task {
-              if (c.hasNext) {
-                val r = c.next
-                logger.debug(s"fetch $r")
-                r.asInstanceOf[T]
-              } else {
-                throw Cause.Terminated(Cause.End)
-              }
-            }
+      private def mongoR[T](q: BasicDBObject, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): Process[Task, T] = {
+        io.resource(Task.delay(client.getDB(db).getCollection(coll).find(q)))(c ⇒ Task.delay(c.close)) { c ⇒
+          Task {
+            if (c.hasNext) {
+              val r = c.next
+              r.asInstanceOf[T]
+            } else throw Cause.Terminated(Cause.End)
           }
         }
       }
 
-      implicit object RxStreamer extends StreamerFactory[Observable] {
-        override def create[T](q: BasicDBObject, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): Observable[T] = {
-          Observable { subscriber: rx.lang.scala.Subscriber[T] ⇒
-            subscriber.setProducer(new Producer() {
-              lazy val cursor: Option[DBCursor] = (Try {
-                Option(client.getDB(db).getCollection(coll).find(q))
-              } recover {
-                case e: Throwable ⇒
-                  subscriber.onError(e)
-                  None
-              }).get
+      implicit object ProcStreamer extends StreamerFactory[SProc] {
+        override def create[T](q: BasicDBObject, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): SProc[T] =
+          mongoR[T](q, client, db, coll)
+      }
 
-              @tailrec def go(n: Long): Unit = {
-                if (n > 0) {
-                  if (cursor.forall(_.hasNext)) {
-                    val r = cursor.get.next().asInstanceOf[T]
-                    logger.debug(s"fetch $r")
-                    subscriber.onNext(r)
-                    go(n - 1)
-                  } else subscriber.onCompleted()
-                }
-              }
+      implicit val M = new scalaz.Monad[MStream]() {
+        override def point[T](a: ⇒ T): MStream[T] =
+          MongoStream(Process.eval(Task.now { client: MongoClient ⇒
+            Task(Process.eval(Task.delay(a)))
+          }))
 
-              override def request(n: Long): Unit = {
-                logger.debug(s"request $n")
-                Task(go(n))(pool).runAsync(_.fold((ex ⇒ subscriber.onError(ex)), (_ ⇒ ())))
-              }
-            })
-          }
+        override def bind[T, B](fa: MStream[T])(f: (T) ⇒ MStream[B]) = fa flatMap f
+      }
+
+      implicit object MongoStreamer extends StreamerFactory[MStream] {
+        override def create[T](q: BasicDBObject, client: MongoClient /*null*/ , db: String, coll: String)(implicit pool: ExecutorService): MStream[T] = {
+          MongoStream(Process.eval(Task.now { client: MongoClient ⇒ Task(mongoR[T](q, client, db, coll)) }))
         }
       }
     }
   }
 
   implicit class ProgramSyntax(val self: Query.QueryBuilder[BasicDBObject]) extends AnyVal {
+    import outer.Interaction._
+    import scalaz.Monad
+
     def one(client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService) =
-      Task(outer.Interaction.program(self, client, db, coll, FetchMode.One)
-        .foldMap(outer.Interaction.Trampolined compose outer.Interaction.intInterpreterCoyo).run)(pool)
+      Task(program(self, client, db, coll, FetchMode.One)
+        .foldMap(Trampolined compose intInterpreterCoyo).run)(pool)
 
     def list(client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): Task[NonEmptyResult] =
-      Task(outer.Interaction.program(self, client, db, coll, FetchMode.Batch)
-        .foldMap(outer.Interaction.Trampolined compose outer.Interaction.intInterpreterCoyo).run)(pool)
+      Task(program(self, client, db, coll, FetchMode.Batch)
+        .foldMap(Trampolined compose intInterpreterCoyo).run)(pool)
 
-    def stream[M[_]: scalaz.Monad](client: MongoClient, db: String, coll: String)(implicit c: outer.Interaction.StreamerFactory[M], pool: ExecutorService): M[BasicDBObject] =
-      c.create((scalaz.Free.runFC[Query.StatementOp, QueryS, BasicDBObject](self)(Query.QueryInterpreterS)).run(outer.Query.init)._1,
+    /**
+     *
+     * @param db
+     * @param coll
+     * @param f
+     * @param pool
+     * @param client
+     * @tparam M
+     * @return
+     */
+    def stream[M[_]: Monad](db: String, coll: String)(implicit f: StreamerFactory[M], pool: ExecutorService, client: MongoClient): M[BasicDBObject] =
+      f.create((scalaz.Free.runFC[Query.StatementOp, QueryS, BasicDBObject](self)(Query.QueryInterpreterS)).run(outer.Query.init)._1,
         client, db, coll)
 
-    def mongoStream(db: String, coll: String)(implicit pool: ExecutorService): query.MongoStream[MongoClient, BasicDBObject] =
+    /**
+     *
+     * @param db
+     * @param coll
+     * @param f
+     * @param pool
+     * @param client
+     * @tparam M
+     * @return
+     */
+    def streamC[M[_]: Monad](db: String, coll: String)(implicit f: StreamerFactory[M], pool: ExecutorService, client: MongoClient): M[BasicDBObject] = {
+      f.create((scalaz.Free.runFC[Query.StatementOp, QueryS, BasicDBObject](self)(Query.QueryInterpreterS)).run(outer.Query.init)._1,
+        client, db, coll)
+    }
+
+    /*def streamM(db: String, coll: String)(implicit pool: ExecutorService): MongoStream[MongoClient, BasicDBObject] =
       MongoStream(Process.eval(Task.now { client: MongoClient ⇒
-        Task(self.stream[ScalazProcess](client, db, coll)) //.onComplete(Process.eval(Task.delay(client.close())).drain))
-      }))
+        Task(self.stream[SProc](db, coll))
+      }))*/
+
+  }
+
+  trait STypes {
+    type MStream[Out] <: scalaz.Applicative[MStream]
+  }
+
+  abstract class InnerJoin[T <: STypes] {
+    def left[A](): T#MStream[A]
+    def relation[A, B]: A ⇒ T#MStream[B]
+    def innerJoin[A, B](l: T#MStream[A])(relation: A ⇒ T#MStream[B])(f: (A, B) ⇒ B): T#MStream[B]
+  }
+
+  trait ProcessStreamerType extends STypes {
+    /*
+    class MonadStream[A] extends scalaz.Monad[MStream] {
+      override def point[A](a: => A): MonadStream[A] = {
+        MongoStream(Process.eval(Task.now { client: MongoClient ⇒
+          Task(Process.eval(Task.delay(a)))
+        }))
+      }
+      override def bind[A, B](fa: MonadStream[A])(f: (A) => MonadStream[B]): MonadStream[B] = ???
+    }*/
+
+    type MStream[Out] = MongoStream[MongoClient, Out]
+  }
+
+  object ProcessStreamerType {
+    implicit object join extends InnerJoin[ProcessStreamerType] {
+
+      override def left[A](): ProcessStreamerType#MStream[A] = ???
+
+      override def relation[A, B]: A ⇒ ProcessStreamerType#MStream[B] = ???
+
+      override def innerJoin[A, B](l: ProcessStreamerType#MStream[A])(relation: A ⇒ ProcessStreamerType#MStream[B])(f: (A, B) ⇒ B): ProcessStreamerType#MStream[B] = {
+        l flatMap { id: A ⇒ relation(id).|>(scalaz.stream.process1.lift { f(id, _) }) }
+      }
+    }
+  }
+
+  object InnerJoin {
+    def apply[T <: STypes](implicit p: InnerJoin[T]): InnerJoin[T] = p
+  }
+
+  final class JoinProgram[T <: STypes: InnerJoin](implicit t: ClassTag[T]) {
+    private val logger = org.apache.log4j.Logger.getLogger(classOf[JoinProgram[T]])
+    private val join = InnerJoin.apply[T]
+
+    def join[A, B](f: (A, B) ⇒ B): Unit = {
+      logger.info(s" ${t.runtimeClass.getName}")
+      join.innerJoin(join.left[A])(join.relation[A, B])(f)
+    }
   }
 }

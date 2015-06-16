@@ -17,11 +17,11 @@ package mongo.query.test
 import com.mongodb._
 import java.util.Date
 import java.util.Arrays._
-import java.util.concurrent.{ TimeUnit, ExecutorService, Executors }
+import java.util.concurrent.{ ThreadLocalRandom, TimeUnit, ExecutorService, Executors }
 import de.bwaldvogel.mongo.MongoServer
 import de.bwaldvogel.mongo.backend.memory.MemoryBackend
 import mongo.{ query, NamedThreadFactory }
-import mongo.query.{ MongoStream, MStreamFactory, QuerySetting }
+import mongo.query.{ MongoStream, MongoStreamFactory, QuerySetting }
 import org.apache.log4j.Logger
 
 import scala.collection.JavaConversions._
@@ -51,13 +51,17 @@ object MongoIntegrationEnv {
       asScalaBuffer(obj.get("categories").asInstanceOf[java.util.List[Int]]))
   }
 
+  val langs = IndexedSeq("Java", "C++", "ObjectiveC", "Scala", "Groovy")
+  def letter = ThreadLocalRandom.current().nextInt('a', 'z').toChar
+
   val ids = ArrayBuffer(1, 2, 3, 35)
 
   val DB_NAME = "temp"
   val PRODUCT = "product"
   val CATEGORY = "category"
   val PRODUCER = "producer"
-  val STREAMS = "streams"
+  val PROGRAMMERS = "programmers"
+  val LANGS = "langs"
 
   def sinkWithBuffer[T] = {
     val buffer: Buffer[T] = Buffer.empty
@@ -72,10 +76,17 @@ object MongoIntegrationEnv {
     val serverAddress = server.bind()
     val client = new MongoClient(new ServerAddress(serverAddress))
     val products = client.getDB(DB_NAME).getCollection(PRODUCT)
-    val stream = client.getDB(DB_NAME).getCollection(STREAMS)
 
-    for (i ← 0 to 10) {
-      stream.insert(new BasicDBObject("value", i))
+    val langsC = client.getDB(DB_NAME).getCollection(LANGS)
+    val programmers = client.getDB(DB_NAME).getCollection(PROGRAMMERS)
+
+    for ((v, i) ← langs.zipWithIndex) {
+      langsC.insert(new BasicDBObject("index", i).append("name", v))
+    }
+
+    for (i ← 1 to 10) {
+      programmers.insert(new BasicDBObject("name", s"$letter-$letter-$letter")
+        .append("lang", ThreadLocalRandom.current().nextInt(langs.size)))
     }
 
     products.insert(new BasicDBObject("article", ids(0)).append("name", "Extra Large Wheel Barrow")
@@ -129,9 +140,9 @@ object MongoIntegrationEnv {
   }
 
   /**
-   * useful for test case
+   * used in test cases
    */
-  implicit object TestCaseScope extends MStreamFactory[DB] {
+  implicit object TestCaseFactory extends MongoStreamFactory[DB] {
     override def createMStream(arg: String \/ QuerySetting)(implicit pool: ExecutorService): MongoStream[DB, DBObject] = {
       arg match {
         case \/-(set) ⇒

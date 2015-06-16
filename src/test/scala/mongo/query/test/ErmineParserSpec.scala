@@ -20,9 +20,9 @@ import scalaz.{ -\/, \/- }
 import mongo.mqlparser._
 import org.specs2.mutable.Specification
 
-class ConfigParserSpec extends Specification {
+class ErmineParserSpec extends Specification {
 
-  val logger = org.apache.log4j.Logger.getLogger("parser")
+  val logger = org.apache.log4j.Logger.getLogger("ermine-parser")
 
   "Pair parser" should {
     "parse key value sequence" in {

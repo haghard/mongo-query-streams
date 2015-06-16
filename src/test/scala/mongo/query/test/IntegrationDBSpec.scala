@@ -22,6 +22,7 @@ import dsl2._
 import com.mongodb._
 import org.specs2.mutable._
 import org.apache.log4j.Logger
+import scala.collection.JavaConversions._
 import scalaz.stream.Process._
 import scala.collection.mutable._
 import scalaz.stream.process1
@@ -39,6 +40,7 @@ trait Enviroment[T] extends org.specs2.mutable.Before {
 
 class IntegrationMongoCleanUpSpec extends Specification {
   import MongoIntegrationEnv._
+  //import TestCaseFactory extends MStreamFactory[DB]
 
   private val logger = Logger.getLogger(classOf[IntegrationMongoCleanUpSpec])
 
@@ -47,18 +49,10 @@ class IntegrationMongoCleanUpSpec extends Specification {
       b.q("producer_num" $eq id)
       b.collection(PRODUCER)
       b.db(DB_NAME)
-    } |> asNameStr
+    }.column[String]("name")
 
-  private def categories(e: (String, Buffer[Int])) = {
-    create { b ⇒
-      b.q("category" $in e._2)
-      b.sort("name" $eq -1)
-      b.collection(CATEGORY)
-      b.db(DB_NAME)
-    } map { obj ⇒ s"${e._1} - ${obj.get("name").asInstanceOf[String]}" }
-  }
-
-  private def categories0(ids: Buffer[Int]) = {
+  private def categories(obj: DBObject) = {
+    val ids = asScalaBuffer(obj.get("categories").asInstanceOf[java.util.List[Int]])
     create { b ⇒
       b.q("category" $in ids)
       b.sort("name" $eq -1)
@@ -72,10 +66,10 @@ class IntegrationMongoCleanUpSpec extends Specification {
       b.q("article" $gt 2 $lt 40)
       b.collection(PRODUCT)
       b.db(DB_NAME)
-    }
+    }.column[Int]("article")
 
     val p = for {
-      dbObject ← Resource through (products |> asArticleId).channel
+      dbObject ← Resource through products.out
       _ ← dbObject to sink
     } yield ()
 
@@ -89,10 +83,10 @@ class IntegrationMongoCleanUpSpec extends Specification {
       b.sort("article" $eq -1)
       b.collection(PRODUCT)
       b.db(DB_NAME)
-    }
+    }.column[Int]("article").map(_.toString)
 
     val p = for {
-      dbObject ← Resource through (products |> asArticleIdsStr).channel
+      dbObject ← Resource through products.out
       _ ← dbObject.fold1 { _ + "-" + _ } to sink
     } yield ()
 
@@ -106,10 +100,10 @@ class IntegrationMongoCleanUpSpec extends Specification {
       q("""{ "article" : 1 } """)
       collection(PRODUCT)
       b.db(DB_NAME)
-    }
+    }.column[String]("name")
 
     val p = for {
-      dbObject ← Resource through (products |> asNameStr).channel
+      dbObject ← Resource through products.out
       _ ← dbObject to sink
     } yield ()
 
@@ -118,40 +112,48 @@ class IntegrationMongoCleanUpSpec extends Specification {
   }
 
   "Hit server with join ONE-TO-MANY" in new Enviroment[String] {
-    val products = create { b ⇒
+    val pNums = create { b ⇒
       b.q(""" { "article": 1 } """)
       b.collection(PRODUCT)
       b.db(DB_NAME)
-    } |> asNum
+    }.column[Int]("producer_num") //|> asNum
 
     val p = for {
       dbObject ← Resource through (for {
-        n ← products
+        n ← pNums
         prod ← producers(n)
-      } yield (prod)).channel
+      } yield (prod)).out
       _ ← dbObject to sink
     } yield ()
 
     p.run.run
-    //1 -> "Puma", "Reebok"
     buffer must be equalTo ArrayBuffer("Puma", "Reebok")
   }
 
   "Hit server with join ONE-TO-MANY with fold in single value" in new Enviroment[String] {
-    val prodsWithCategoryIds = create { b ⇒
+    val qProds = create { b ⇒
       b.q(Obj("article" -> 1).toString)
       b.collection(PRODUCT)
       b.db(DB_NAME)
-    } |> categoryIds
+    } //|> categoryIds
 
     val p = for {
+      dbObject ← Resource.through(qProds.innerJoinRaw(categories(_)) { (l, r) ⇒
+        s"${l.get("name")} - ${r.get("name").asInstanceOf[String]}"
+      }.out)
+      _ ← dbObject.fold1 {
+        _ + "/" + _
+      } to sink
+    } yield ()
+
+    /*val p = for {
       dbObject ← Resource through (
         for {
           n ← prodsWithCategoryIds
           prod ← categories(n)
-        } yield (prod)).channel
+        } yield (prod)).out
       _ ← dbObject.fold1 { _ + "/" + _ } to sink
-    } yield ()
+    } yield ()*/
 
     p.run.run
     buffer(0) must be equalTo
@@ -167,12 +169,17 @@ class IntegrationMongoCleanUpSpec extends Specification {
       b.q(Obj("article" -> Obj(($in(), List(1, 2)))).toString)
       b.collection(PRODUCT)
       b.db(DB_NAME)
-    } |> categoryIds
+    } //|> categoryIds
 
     val p = for {
-      dbObject ← Resource through ((for { n ← prodsWithCategoryIds; prod ← categories0(n._2) } yield (prod)).channel)
-      _ ← dbObject.foldMap(_.get("name").asInstanceOf[String] + ", ") to sink
+      dbObject ← Resource through (prodsWithCategoryIds.innerJoinRaw(categories(_))((l, r) ⇒ r.get("name").asInstanceOf[String]).out)
+      _ ← dbObject.foldMap(_ + ", ") to sink
     } yield ()
+
+    /*val p = for {
+      dbObject ← Resource through ((for { n ← prodsWithCategoryIds; prod ← categories0(n._2) } yield (prod)).out)
+      _ ← dbObject.foldMap(_.get("name").asInstanceOf[String] + ", ") to sink
+    } yield ()*/
 
     p.run.run
     logger.debug(buffer(0))
@@ -186,10 +193,10 @@ class IntegrationMongoCleanUpSpec extends Specification {
       b.db(DB_NAME)
       b.limit(2)
       b.skip(1)
-    }
+    }.column[Int]("article")
 
     val p = for {
-      dbObject ← Resource through (products |> asArticleId).channel
+      dbObject ← Resource through products.out
       _ ← dbObject to sink
     } yield ()
 
@@ -210,16 +217,17 @@ class IntegrationMongoCleanUpSpec extends Specification {
       b.q("article" $eq 1)
       b.collection(PRODUCT)
       b.db(DB_NAME)
-    }
+    }.column[Int]("article")
 
     val categories = create { b ⇒
       b.q("category" $eq 12)
       b.collection(CATEGORY)
       b.db(DB_NAME)
-    }
+    }.column[Int]("category")
 
     val p = for {
-      dbObject ← Resource through ((products zip categories) |> resultTransducer).channel
+      dbObject ← Resource through (products zip categories)
+        .map { r: (Int, Int) ⇒ r._1 + "-" + r._2 }.out
       _ ← dbObject to sink
     } yield ()
 
@@ -249,7 +257,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
     val tee = products zipWith categories
 
     val p = for {
-      dbObject ← Resource through tee.channel
+      dbObject ← Resource through tee.out
       _ ← dbObject to sink
     } yield ()
 

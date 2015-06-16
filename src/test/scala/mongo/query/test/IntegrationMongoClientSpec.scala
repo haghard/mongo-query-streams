@@ -29,7 +29,7 @@ import org.specs2.mutable._
 import org.specs2.specification.Snippets
 
 trait TestEnviroment[T] extends org.specs2.mutable.After {
-  protected val logger = Logger.getLogger(classOf[IntegrationMongoSpec])
+  protected val logger = Logger.getLogger(classOf[IntegrationMongoClientSpec])
 
   val (sink, buffer) = sinkWithBuffer[T]
   val isFailureInvoked = new AtomicBoolean()
@@ -54,17 +54,17 @@ trait TestEnviroment[T] extends org.specs2.mutable.After {
   }
 }
 
-class IntegrationMongoSpec extends Specification with Snippets {
+class IntegrationMongoClientSpec extends Specification {
 
   "Hit server with invalid query" in new TestEnviroment[Int] {
     val q = create { b ⇒
       b.q(""" { "num :  } """)
       b.db(DB_NAME)
       b.collection(PRODUCT)
-    }
+    }.column[Int]("article")
 
     val p = for {
-      dbObject ← Resource through (q |> asArticleId).channel
+      dbObject ← Resource through q.out
       _ ← dbObject to sink
     } yield ()
 
@@ -80,10 +80,10 @@ class IntegrationMongoSpec extends Specification with Snippets {
     val q = create { b ⇒
       b.q(""" { "num" : 1 } """)
       b.db(DB_NAME)
-    }
+    }.column[Int]("article")
 
     val p = for {
-      dbObject ← Resource through (q |> asArticleId).channel
+      dbObject ← Resource through q.out
       _ ← dbObject to sink
     } yield ()
 
@@ -100,10 +100,10 @@ class IntegrationMongoSpec extends Specification with Snippets {
       b.sort(""" { "num } """) //invalid
       b.collection(PRODUCT)
       b.db(DB_NAME)
-    }
+    }.column[Int]("article")
 
     val p = for {
-      dbObject ← Resource through (q |> asArticleId).channel
+      dbObject ← Resource through q.out
       _ ← dbObject to sink
     } yield ()
 
@@ -118,10 +118,10 @@ class IntegrationMongoSpec extends Specification with Snippets {
     val q = create { b ⇒
       b.q(""" { "num" : 1 } """)
       b.collection(PRODUCT)
-    }
+    }.column[Int]("article")
 
     val p = for {
-      dbObject ← Resource through (q |> asArticleId).channel
+      dbObject ← Resource through q.out
       _ ← dbObject to sink
     } yield ()
 
@@ -137,11 +137,11 @@ class IntegrationMongoSpec extends Specification with Snippets {
       b.q("dt" $gt new Date())
       b.collection(PRODUCT)
       b.db(DB_NAME)
-    }
+    }.column[Int]("article")
 
     for (i ← 1 to 3) yield {
       val p = for {
-        dbObject ← Resource through (products |> asArticleId).channel
+        dbObject ← Resource through products.out
         _ ← dbObject to sink
       } yield ()
 
@@ -164,10 +164,10 @@ class IntegrationMongoSpec extends Specification with Snippets {
       b.q(program.toQuery)
       b.collection(PRODUCT)
       b.db(DB_NAME)
-    }
+    }.column[Int]("article").map(_.toString)
 
     val p = for {
-      dbObject ← Resource through (products |> asArticleIdsStr).channel
+      dbObject ← Resource through products.out
       _ ← dbObject observe EnvLogger to sink
     } yield ()
 
@@ -189,10 +189,10 @@ class IntegrationMongoSpec extends Specification with Snippets {
       b.q(program.toDBObject)
       b.collection(PRODUCT)
       b.db(DB_NAME)
-    }
+    }.column[Int]("article").map(_.toString)
 
     val p = for {
-      dbObject ← Resource through (products |> asArticleIdsStr).channel
+      dbObject ← Resource through products.out
       _ ← dbObject observe EnvLogger to sink
     } yield ()
 
