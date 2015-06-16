@@ -38,13 +38,10 @@ object MongoIntegrationEnv {
 
   implicit val executor = Executors.newFixedThreadPool(5, new NamedThreadFactory("mongo-test-worker"))
 
-  val asArticleId = lift { obj: DBObject ⇒ obj.get("article").asInstanceOf[Int] }
-
-  val asArticleIdsStr = lift { obj: DBObject ⇒ obj.get("article").asInstanceOf[Int].toString }
-
-  val asNameStr = lift { obj: DBObject ⇒ obj.get("name").toString }
-
-  val asNum = lift { obj: DBObject ⇒ obj.get("producer_num").asInstanceOf[Int] }
+  //val asArticleId = lift { obj: DBObject ⇒ obj.get("article").asInstanceOf[Int] }
+  //val asArticleIdsStr = lift { obj: DBObject ⇒ obj.get("article").asInstanceOf[Int].toString }
+  //val asNameStr = lift { obj: DBObject ⇒ obj.get("name").toString }
+  //val asNum = lift { obj: DBObject ⇒ obj.get("producer_num").asInstanceOf[Int] }
 
   val categoryIds = lift { obj: DBObject ⇒
     (obj.get("name").asInstanceOf[String],
@@ -56,7 +53,7 @@ object MongoIntegrationEnv {
 
   val ids = ArrayBuffer(1, 2, 3, 35)
 
-  val DB_NAME = "temp"
+  val TEST_DB = "temp"
   val PRODUCT = "product"
   val CATEGORY = "category"
   val PRODUCER = "producer"
@@ -75,10 +72,10 @@ object MongoIntegrationEnv {
     val server = new MongoServer(new MemoryBackend())
     val serverAddress = server.bind()
     val client = new MongoClient(new ServerAddress(serverAddress))
-    val products = client.getDB(DB_NAME).getCollection(PRODUCT)
+    val products = client.getDB(TEST_DB).getCollection(PRODUCT)
 
-    val langsC = client.getDB(DB_NAME).getCollection(LANGS)
-    val programmers = client.getDB(DB_NAME).getCollection(PROGRAMMERS)
+    val langsC = client.getDB(TEST_DB).getCollection(LANGS)
+    val programmers = client.getDB(TEST_DB).getCollection(PROGRAMMERS)
 
     for ((v, i) ← langs.zipWithIndex) {
       langsC.insert(new BasicDBObject("index", i).append("name", v))
@@ -104,12 +101,12 @@ object MongoIntegrationEnv {
     products.insert(new BasicDBObject("article", ids(3)).append("name", "Small Wheel Barrow").append("dt", new Date())
       .append("category", asList(13)).append("f", true))
 
-    val producer = client.getDB(DB_NAME).getCollection(PRODUCER)
+    val producer = client.getDB(TEST_DB).getCollection(PRODUCER)
     producer.insert(new BasicDBObject().append("producer_num", 1).append("name", "Puma"))
     producer.insert(new BasicDBObject().append("producer_num", 1).append("name", "Reebok"))
     producer.insert(new BasicDBObject().append("producer_num", 2).append("name", "Adidas"))
 
-    val category = client.getDB(DB_NAME).getCollection(CATEGORY)
+    val category = client.getDB(TEST_DB).getCollection(CATEGORY)
     category.insert(new BasicDBObject().append("category", 12).append("name", "Gardening Tools"))
     category.insert(new BasicDBObject().append("category", 13).append("name", "Rubberized Work Glove"))
     category.insert(new BasicDBObject().append("category", 14).append("name", "Car Tools"))
@@ -129,7 +126,7 @@ object MongoIntegrationEnv {
       Task.fork(
         Task.delay {
           if (!obtained) {
-            val db = rs._1.getDB(DB_NAME)
+            val db = rs._1.getDB(TEST_DB)
             logger.debug(s"Access mongo-client ${rs._1.##}")
             obtained = true
             db

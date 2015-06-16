@@ -19,7 +19,6 @@ import com.mongodb.{ DBCursor, DBObject, BasicDBObject, MongoClient }
 import mongo.query.MongoStream
 import scala.annotation.tailrec
 import scala.collection.JavaConversions._
-import scala.reflect.ClassTag
 import scalaz.concurrent.Task
 import scalaz.{ Free, Coyoneda, \/, -\/, \/-, Trampoline, ~> }
 
@@ -279,56 +278,5 @@ package object dsl3 { outer ⇒
         Task(self.stream[SProc](db, coll))
       }))*/
 
-  }
-
-  trait STypes {
-    type MStream[Out] <: scalaz.Applicative[MStream]
-  }
-
-  abstract class InnerJoin[T <: STypes] {
-    def left[A](): T#MStream[A]
-    def relation[A, B]: A ⇒ T#MStream[B]
-    def innerJoin[A, B](l: T#MStream[A])(relation: A ⇒ T#MStream[B])(f: (A, B) ⇒ B): T#MStream[B]
-  }
-
-  trait ProcessStreamerType extends STypes {
-    /*
-    class MonadStream[A] extends scalaz.Monad[MStream] {
-      override def point[A](a: => A): MonadStream[A] = {
-        MongoStream(Process.eval(Task.now { client: MongoClient ⇒
-          Task(Process.eval(Task.delay(a)))
-        }))
-      }
-      override def bind[A, B](fa: MonadStream[A])(f: (A) => MonadStream[B]): MonadStream[B] = ???
-    }*/
-
-    type MStream[Out] = MongoStream[MongoClient, Out]
-  }
-
-  object ProcessStreamerType {
-    implicit object join extends InnerJoin[ProcessStreamerType] {
-
-      override def left[A](): ProcessStreamerType#MStream[A] = ???
-
-      override def relation[A, B]: A ⇒ ProcessStreamerType#MStream[B] = ???
-
-      override def innerJoin[A, B](l: ProcessStreamerType#MStream[A])(relation: A ⇒ ProcessStreamerType#MStream[B])(f: (A, B) ⇒ B): ProcessStreamerType#MStream[B] = {
-        l flatMap { id: A ⇒ relation(id).|>(scalaz.stream.process1.lift { f(id, _) }) }
-      }
-    }
-  }
-
-  object InnerJoin {
-    def apply[T <: STypes](implicit p: InnerJoin[T]): InnerJoin[T] = p
-  }
-
-  final class JoinProgram[T <: STypes: InnerJoin](implicit t: ClassTag[T]) {
-    private val logger = org.apache.log4j.Logger.getLogger(classOf[JoinProgram[T]])
-    private val join = InnerJoin.apply[T]
-
-    def join[A, B](f: (A, B) ⇒ B): Unit = {
-      logger.info(s" ${t.runtimeClass.getName}")
-      join.innerJoin(join.left[A])(join.relation[A, B])(f)
-    }
   }
 }

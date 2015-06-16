@@ -28,6 +28,7 @@ package object query {
   import scalaz.stream.process1._
 
   type MongoChannel[T, A] = Channel[Task, T, Process[Task, A]]
+  type MChannel[A] = MongoChannel[MongoClient, A]
 
   private[mongo] case class QuerySetting(q: DBObject, db: String, collName: String, sortQuery: Option[DBObject],
                                          limit: Option[Int], skip: Option[Int], maxTimeMS: Option[Long])
@@ -36,7 +37,7 @@ package object query {
     def createMStream(arg: String \/ QuerySetting)(implicit pool: ExecutorService): MongoStream[T, DBObject]
   }
 
-  private[mongo] case class MongoStream[T, A](val out: MongoChannel[T, A]) extends scalaz.Monad[A] {
+  private[mongo] case class MongoStream[T, A](val out: MongoChannel[T, A]) {
 
     private def resultMap[B](f: Process[Task, A] ⇒ Process[Task, B]): MongoStream[T, B] =
       MongoStream(out.map(r ⇒ r andThen (pt ⇒ pt.map(p ⇒ f(p)))))
@@ -51,7 +52,7 @@ package object query {
      * @tparam B
      * @return
      */
-    override def map[A, B](f: A ⇒ B): MongoStream[T, B] = resultMap(_.map(f))
+    def map[B](f: A ⇒ B): MongoStream[T, B] = resultMap(_.map(f))
 
     /**
      *
@@ -59,7 +60,7 @@ package object query {
      * @tparam B
      * @return
      */
-    override def flatMap[A, B](f: A ⇒ MongoStream[T, B]): MongoStream[T, B] = MongoStream {
+    def flatMap[B](f: A ⇒ MongoStream[T, B]): MongoStream[T, B] = MongoStream {
       out.map(
         (g: T ⇒ Task[Process[Task, A]]) ⇒ (task: T) ⇒
           g(task).map { p ⇒

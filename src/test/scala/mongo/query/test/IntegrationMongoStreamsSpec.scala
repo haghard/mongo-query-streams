@@ -55,7 +55,7 @@ class IntegrationMongoStreamsSpec extends Specification {
     initMongo
 
     val p = for { q ← "index" $eq 0 } yield q
-    val out = p.one(client, DB_NAME, LANGS).attemptRun
+    val out = p.one(client, TEST_DB, LANGS).attemptRun
 
     out.isRight === true
     out.toOption.get.isRight === true
@@ -68,7 +68,7 @@ class IntegrationMongoStreamsSpec extends Specification {
 
     val p = for { q ← "index" $gte 1 $lt 3 } yield q
 
-    val out = p.list(client, DB_NAME, LANGS).attemptRun
+    val out = p.list(client, TEST_DB, LANGS).attemptRun
     out.isRight === true
     out.toOption.get.isRight === true
     val r = out.toOption.get.toOption.get
@@ -83,7 +83,7 @@ class IntegrationMongoStreamsSpec extends Specification {
     val buf = Buffer.empty[BasicDBObject]
     val sink = io.fillBuffer(buf)
 
-    val out = (q.stream[SProc](DB_NAME, LANGS) to sink).run.attemptRun
+    val out = (q.stream[SProc](TEST_DB, LANGS) to sink).run.attemptRun
     out should be equalTo \/-(())
     langs.size === buf.size
   }
@@ -99,7 +99,7 @@ class IntegrationMongoStreamsSpec extends Specification {
 
     val p = (for {
       element ← Process.eval(Task.delay(client))
-        .through(query.streamC[MStream](DB_NAME, LANGS).column[String](field).out)
+        .through(query.streamC[MStream](TEST_DB, LANGS).column[String](field).out)
       _ ← element to Sink
     } yield ())
 
@@ -122,8 +122,8 @@ class IntegrationMongoStreamsSpec extends Specification {
     //Select all programmers by specific lang
     def qProgByLang(id: Int) = for { q ← "lang" $eq id } yield q
 
-    val query = qLang.streamC[MStream](DB_NAME, LANGS).column[Int]("index")
-      .innerJoin(qProgByLang(_).streamC[MStream](DB_NAME, PROGRAMMERS).column[String]("name")) { (ind, p) ⇒ s"[lang:$ind/person:$p]" }
+    val query = qLang.streamC[MStream](TEST_DB, LANGS).column[Int]("index")
+      .innerJoin(qProgByLang(_).streamC[MStream](TEST_DB, PROGRAMMERS).column[String]("name")) { (ind, p) ⇒ s"[lang:$ind/person:$p]" }
 
     val p = for {
       element ← Process.eval(Task.delay(client)) through query.out
@@ -147,7 +147,7 @@ class IntegrationMongoStreamsSpec extends Specification {
     val qLang = for { q ← "index" $gte 0 $lt 10 } yield q
     def qProg(left: BasicDBObject) = for { q ← "lang" $eq left.get("index").asInstanceOf[Int] } yield q
 
-    val query = qLang.streamC[MStream](DB_NAME, LANGS).innerJoinRaw(qProg(_).streamC[MStream](DB_NAME, PROGRAMMERS)) { (l, r) ⇒
+    val query = qLang.streamC[MStream](TEST_DB, LANGS).innerJoinRaw(qProg(_).streamC[MStream](TEST_DB, PROGRAMMERS)) { (l, r) ⇒
       s"[lang:${l.get("name").asInstanceOf[String]}/person:${r.get("name").asInstanceOf[String]}]"
     }
 

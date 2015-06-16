@@ -23,10 +23,8 @@ import scalaz.concurrent.Task
 import org.apache.log4j.Logger
 import scalaz.stream.Process._
 import java.util.concurrent.atomic.AtomicBoolean
-import MongoIntegrationEnv.{ executor, ids, sinkWithBuffer, mock, asArticleId, asArticleIdsStr, DB_NAME, PRODUCT }
-
+import MongoIntegrationEnv.{ executor, ids, sinkWithBuffer, mock, /*asArticleId, asArticleIdsStr,*/ TEST_DB, PRODUCT }
 import org.specs2.mutable._
-import org.specs2.specification.Snippets
 
 trait TestEnviroment[T] extends org.specs2.mutable.After {
   protected val logger = Logger.getLogger(classOf[IntegrationMongoClientSpec])
@@ -59,7 +57,7 @@ class IntegrationMongoClientSpec extends Specification {
   "Hit server with invalid query" in new TestEnviroment[Int] {
     val q = create { b ⇒
       b.q(""" { "num :  } """)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
       b.collection(PRODUCT)
     }.column[Int]("article")
 
@@ -79,7 +77,7 @@ class IntegrationMongoClientSpec extends Specification {
   "Hit server with invalid query - missing collection" in new TestEnviroment[Int] {
     val q = create { b ⇒
       b.q(""" { "num" : 1 } """)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
     }.column[Int]("article")
 
     val p = for {
@@ -99,7 +97,7 @@ class IntegrationMongoClientSpec extends Specification {
       b.q(""" { "num" : 1 } """)
       b.sort(""" { "num } """) //invalid
       b.collection(PRODUCT)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
     }.column[Int]("article")
 
     val p = for {
@@ -136,7 +134,7 @@ class IntegrationMongoClientSpec extends Specification {
     val products = create { b ⇒
       b.q("dt" $gt new Date())
       b.collection(PRODUCT)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
     }.column[Int]("article")
 
     for (i ← 1 to 3) yield {
@@ -163,7 +161,7 @@ class IntegrationMongoClientSpec extends Specification {
     val products = create { b ⇒
       b.q(program.toQuery)
       b.collection(PRODUCT)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
     }.column[Int]("article").map(_.toString)
 
     val p = for {
@@ -188,7 +186,7 @@ class IntegrationMongoClientSpec extends Specification {
     val products = create { b ⇒
       b.q(program.toDBObject)
       b.collection(PRODUCT)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
     }.column[Int]("article").map(_.toString)
 
     val p = for {

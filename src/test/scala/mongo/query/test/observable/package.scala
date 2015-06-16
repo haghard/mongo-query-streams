@@ -16,6 +16,8 @@ package mongo.query.test
 
 import java.util.concurrent.ExecutorService
 import mongo.dsl3.Interaction.StreamerFactory
+import mongo.dsl3.Query
+import org.apache.log4j.Logger
 import rx.lang.scala.schedulers.ExecutionContextScheduler
 import rx.lang.scala.{ Producer, Observable, Subscriber }
 import com.mongodb._
@@ -23,6 +25,7 @@ import com.mongodb._
 import scala.concurrent.ExecutionContext
 import scala.util.Try
 import scala.annotation.tailrec
+import mongo._
 
 package object observable {
 
@@ -63,8 +66,106 @@ package object observable {
     }
   }
 
-  implicit class ObservableSyntax[T](val self: Observable[T]) extends AnyVal {
+  trait MongoObservableT extends join.STypes {
+    type MStream[Out] = Observable[Out]
+  }
 
+  trait Fetcher[T] extends Producer {
+    def db: String
+    def coll: String
+    def q: BasicDBObject
+    def c: MongoClient
+    def log: Logger
+    def subscriber: Subscriber[T]
+
+    def extract(c: DBCursor): T = {
+      val r = c.next().asInstanceOf[T]
+      log.info(s"fetch $r")
+      r
+    }
+
+    lazy val cursor: Option[DBCursor] = (Try {
+      Option(c.getDB(db).getCollection(coll).find(q))
+    } recover {
+      case e: Throwable ⇒
+        subscriber.onError(e)
+        None
+    }).get
+
+    @tailrec private def go(n: Long): Unit = {
+      if (n > 0) {
+        if (cursor.find(_.hasNext).isDefined) {
+          subscriber.onNext(extract(cursor.get))
+          go(n - 1)
+        } else subscriber.onCompleted
+      }
+    }
+
+    def fetch(n: Long): Unit = {
+      log.info(s"${##} request $n")
+      go(n)
+    }
+  }
+
+  trait PKFetcher[T] extends Fetcher[T] {
+    self: { def key: String } ⇒
+
+    abstract override def extract(c: DBCursor): T = {
+      super.extract(c).asInstanceOf[DBObject].get(key).asInstanceOf[T]
+    }
+  }
+
+  final class NestedProducer[T](val subscriber: Subscriber[T], val db: String, val coll: String,
+                                val q: BasicDBObject, val c: MongoClient, val log: Logger) extends Fetcher[T] {
+    override def request(n: Long) = fetch(n)
+  }
+
+  final class KeyProducer[T](val subscriber: Subscriber[T], val db: String, val coll: String,
+                             val q: BasicDBObject, val c: MongoClient, val log: Logger,
+                             val key: String) extends PKFetcher[T] {
+    override def request(n: Long) = fetch(n)
+  }
+
+  object MongoObservableT {
+    import scalaz.Free.runFC
+    import Query._
+
+    implicit object joiner extends join.Joiner[MongoObservableT] {
+      val init = new BasicDBObject
+
+      def scheduler = ExecutionContextScheduler(ExecutionContext.fromExecutor(exec))
+
+      private def resource[A](q: BasicDBObject, db: String, coll: String): Observable[A] = {
+        Observable { subscriber: Subscriber[A] ⇒
+          subscriber.setProducer(new NestedProducer[A](subscriber, db, coll, q, client, log))
+        }.subscribeOn(scheduler)
+      }
+
+      private def keyResource[A](q: BasicDBObject, db: String, coll: String, key: String): Observable[A] = {
+        Observable { subscriber: Subscriber[A] ⇒
+          subscriber.setProducer(new KeyProducer[A](subscriber, db, coll, q, client, log, key))
+        }.subscribeOn(scheduler)
+      }
+
+      override def left[A](q: Query.QueryBuilder[BasicDBObject], db: String, coll: String, key: String): MongoObservableT#MStream[A] = {
+        val q0 = (runFC[StatementOp, QueryS, BasicDBObject](q)(Query.QueryInterpreterS)).run(init)._1
+        log.info(s"[$db - $coll] query: $q0")
+        keyResource[A](q0, db, coll, key)
+      }
+
+      override def relation[A, B](r: (A) ⇒ Query.QueryBuilder[BasicDBObject], db: String, coll: String): (A) ⇒ MongoObservableT#MStream[B] =
+        id ⇒ {
+          val q0 = (runFC[StatementOp, QueryS, BasicDBObject](r(id))(Query.QueryInterpreterS)).run(init)._1
+          log.info(s"[$db - $coll] query: $q0")
+          resource[B](q0, db, coll)
+        }
+
+      override def innerJoin[A, B, C](l: Observable[A])(relation: (A) ⇒ Observable[B])(f: (A, B) ⇒ C): MongoObservableT#MStream[C] =
+        l.flatMap { id ⇒ relation(id).map(f(id, _)) }
+    }
+  }
+
+  implicit class ObservableSyntax[T](val self: Observable[T]) extends AnyVal {
     def column[B](name: String): Observable[B] =
       self.map { record ⇒
         record match {

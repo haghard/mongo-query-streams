@@ -80,8 +80,8 @@ class ObservableSpec extends Specification {
     val qLang = for { q ← "index" $gte 0 $lt 10 } yield q
     def qProgByLang(id: Int) = for { q ← "lang" $eq id } yield q
 
-    val query = qLang.streamC[Observable](DB_NAME, LANGS).column[Int]("index")
-      .leftJoin(qProgByLang(_).streamC[Observable](DB_NAME, PROGRAMMERS).column[String]("name")) { (ind, p) ⇒ s"[lang:$ind/person:$p]" }
+    val query = qLang.streamC[Observable](TEST_DB, LANGS).column[Int]("index")
+      .leftJoin(qProgByLang(_).streamC[Observable](TEST_DB, PROGRAMMERS).column[String]("name")) { (ind, p) ⇒ s"[lang:$ind/person:$p]" }
 
     val s = new Subscriber[String] {
       override def onStart(): Unit = request(1)

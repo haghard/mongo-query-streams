@@ -48,7 +48,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
     create { b ⇒
       b.q("producer_num" $eq id)
       b.collection(PRODUCER)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
     }.column[String]("name")
 
   private def categories(obj: DBObject) = {
@@ -57,7 +57,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
       b.q("category" $in ids)
       b.sort("name" $eq -1)
       b.collection(CATEGORY)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
     }
   }
 
@@ -65,7 +65,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
     val products = create { b ⇒
       b.q("article" $gt 2 $lt 40)
       b.collection(PRODUCT)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
     }.column[Int]("article")
 
     val p = for {
@@ -82,7 +82,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
       b.q("article" $gt 2 $lt 40)
       b.sort("article" $eq -1)
       b.collection(PRODUCT)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
     }.column[Int]("article").map(_.toString)
 
     val p = for {
@@ -99,7 +99,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
       import b._
       q("""{ "article" : 1 } """)
       collection(PRODUCT)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
     }.column[String]("name")
 
     val p = for {
@@ -115,7 +115,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
     val pNums = create { b ⇒
       b.q(""" { "article": 1 } """)
       b.collection(PRODUCT)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
     }.column[Int]("producer_num") //|> asNum
 
     val p = for {
@@ -134,7 +134,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
     val qProds = create { b ⇒
       b.q(Obj("article" -> 1).toString)
       b.collection(PRODUCT)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
     } //|> categoryIds
 
     val p = for {
@@ -168,7 +168,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
     val prodsWithCategoryIds = create { b ⇒
       b.q(Obj("article" -> Obj(($in(), List(1, 2)))).toString)
       b.collection(PRODUCT)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
     } //|> categoryIds
 
     val p = for {
@@ -190,7 +190,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
     val products = create { b ⇒
       b.q(""" { "article": { "$gt" : 0, "$lt" : 4 } }""")
       b.collection(PRODUCT)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
       b.limit(2)
       b.skip(1)
     }.column[Int]("article")
@@ -216,13 +216,13 @@ class IntegrationMongoCleanUpSpec extends Specification {
     val products = create { b ⇒
       b.q("article" $eq 1)
       b.collection(PRODUCT)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
     }.column[Int]("article")
 
     val categories = create { b ⇒
       b.q("category" $eq 12)
       b.collection(CATEGORY)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
     }.column[Int]("category")
 
     val p = for {
@@ -245,13 +245,13 @@ class IntegrationMongoCleanUpSpec extends Specification {
     val products = create { b ⇒
       b.q("article" $in Seq(1, 2, 3))
       b.collection(PRODUCT)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
     }
 
     val categories = create { b ⇒
       b.q("category" $in Seq(12, 13))
       b.collection(CATEGORY)
-      b.db(DB_NAME)
+      b.db(TEST_DB)
     }
 
     val tee = products zipWith categories
