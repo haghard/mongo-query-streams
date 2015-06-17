@@ -17,7 +17,7 @@ First, you will need to add the Bintray resolver settings to your SBT file:
 ```
 and
  ```scala
-   libraryDependencies += "org.mongo.scalaz"    %% "mongo-query-streams" %  "0.6.1"   
+   libraryDependencies += "org.mongo.scalaz"    %% "mongo-query-streams" %  "0.6.2"   
  ```
 
 Examples
