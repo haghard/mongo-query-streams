@@ -48,7 +48,6 @@ class IntegrationMongoStreamsSpec extends Specification {
   import Interaction._
   import MongoIntegrationEnv._
   import Streamer._
-  import scalaz.stream.Process
   val P = scalaz.stream.Process
 
   "Build query and perform findOne" in new MongoStreamsEnviroment {

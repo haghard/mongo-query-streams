@@ -118,6 +118,7 @@ Here's a basic example how to build query, run and get results:
   import dsl._
   import scalaz.concurrent.Task
   import scalaz.stream.process._
+  import scalaz.stream.Process
 
   val client: MongoClient = ...
   val Resource = eval(Task.delay(client))
@@ -157,9 +158,10 @@ Here's a example of how you can do join between collections `LANGS` and `PROGRAM
   import join._
   import dsl3._
   import Query._
-
+  import scalaz.stream.Process  
+  
   val buffer = Buffer.empty[String]
-  val Sink = io.fillBuffer(buffer)
+  val Sink = scalaz.stream.io.fillBuffer(buffer)
     
   val qLang = for { q ← "index" $gte 0 $lte 5 } yield q
   def qProg(id: Int) = for { q ← "lang" $eq id } yield q
