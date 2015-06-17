@@ -30,29 +30,21 @@ package object query {
   type MongoChannel[T, A] = Channel[Task, T, Process[Task, A]]
   type MChannel[A] = MongoChannel[MongoClient, A]
 
-  private[mongo] case class QuerySetting(q: DBObject, db: String, collName: String, sortQuery: Option[DBObject],
-                                         limit: Option[Int], skip: Option[Int], maxTimeMS: Option[Long])
+  case class QuerySetting(q: DBObject, db: String, collName: String, sortQuery: Option[DBObject],
+                          limit: Option[Int], skip: Option[Int], maxTimeMS: Option[Long])
 
-  private[mongo] trait MongoStreamFactory[T] {
-    def createMStream(arg: String \/ QuerySetting)(implicit pool: ExecutorService): MongoStream[T, DBObject]
+  trait MongoStreamFactory[T] {
+    def createMStream(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[T, DBObject]
   }
 
-  private[mongo] case class MongoStream[T, A](val out: MongoChannel[T, A]) {
+  case class DBChannel[T, A](val out: MongoChannel[T, A]) {
 
-    private def resultMap[B](f: Process[Task, A] ⇒ Process[Task, B]): MongoStream[T, B] =
-      MongoStream(out.map(r ⇒ r andThen (pt ⇒ pt.map(p ⇒ f(p)))))
+    private def compose[B](f: Process[Task, A] ⇒ Process[Task, B]): DBChannel[T, B] =
+      DBChannel(out.map(r ⇒ r andThen (pt ⇒ pt.map(p ⇒ f(p)))))
 
-    private def pipe[B](p2: Process1[A, B]): MongoStream[T, B] = resultMap(_.pipe(p2))
+    private def pipe[B](p2: Process1[A, B]): DBChannel[T, B] = compose(_.pipe(p2))
 
-    def |>[B](p2: Process1[A, B]): MongoStream[T, B] = pipe(p2)
-
-    /**
-     *
-     * @param f
-     * @tparam B
-     * @return
-     */
-    def map[B](f: A ⇒ B): MongoStream[T, B] = resultMap(_.map(f))
+    def |>[B](p2: Process1[A, B]): DBChannel[T, B] = pipe(p2)
 
     /**
      *
@@ -60,7 +52,15 @@ package object query {
      * @tparam B
      * @return
      */
-    def flatMap[B](f: A ⇒ MongoStream[T, B]): MongoStream[T, B] = MongoStream {
+    def map[B](f: A ⇒ B): DBChannel[T, B] = compose(_.map(f))
+
+    /**
+     *
+     * @param f
+     * @tparam B
+     * @return
+     */
+    def flatMap[B](f: A ⇒ DBChannel[T, B]): DBChannel[T, B] = DBChannel {
       out.map(
         (g: T ⇒ Task[Process[Task, A]]) ⇒ (task: T) ⇒
           g(task).map { p ⇒
@@ -82,7 +82,7 @@ package object query {
      * @tparam C
      * @return MongoStream[T, C]
      */
-    def zipWith[B, C](stream: MongoStream[T, B])(implicit f: (A, B) ⇒ C): MongoStream[T, C] = MongoStream {
+    def zipWith[B, C](stream: DBChannel[T, B])(implicit f: (A, B) ⇒ C): DBChannel[T, C] = DBChannel {
       val zipper: ((T ⇒ Task[Process[Task, A]], T ⇒ Task[Process[Task, B]]) ⇒ (T ⇒ Task[Process[Task, C]])) = {
         (fa, fb) ⇒
           (r: T) ⇒
@@ -113,7 +113,7 @@ package object query {
      * @tparam B
      * @return MongoStream[T, (A, B)]
      */
-    def zip[B](stream: MongoStream[T, B]): MongoStream[T, (A, B)] = zipWith(stream)((_, _))
+    def zip[B](stream: DBChannel[T, B]): DBChannel[T, (A, B)] = zipWith(stream)((_, _))
 
     /**
      * One to many relation powered by `flatMap` with restricted field in output
@@ -123,7 +123,7 @@ package object query {
      * @tparam C
      * @return
      */
-    def innerJoin[E, C](relation: A ⇒ MongoStream[T, E])(f: (A, E) ⇒ C): MongoStream[T, C] =
+    def innerJoin[E, C](relation: A ⇒ DBChannel[T, E])(f: (A, E) ⇒ C): DBChannel[T, C] =
       flatMap { id: A ⇒ relation(id) |> (lift { f(id, _) }) }
 
     /**
@@ -132,7 +132,7 @@ package object query {
      * @tparam C
      * @return
      */
-    def innerJoinRaw[C](relation: A ⇒ MongoStream[T, A])(f: (A, A) ⇒ C): MongoStream[T, C] =
+    def innerJoinRaw[C](relation: A ⇒ DBChannel[T, A])(f: (A, A) ⇒ C): DBChannel[T, C] =
       flatMap { id: A ⇒ relation(id) |> lift(f(id, _)) }
 
     /**
@@ -142,7 +142,7 @@ package object query {
      * @throws `MongoException` If item is not a `DBObject`.
      * @return `MongoStream[T, B]`
      */
-    def column[B](name: String): MongoStream[T, B] = {
+    def column[B](name: String): DBChannel[T, B] = {
       pipe(lift { record ⇒
         record match {
           case r: DBObject ⇒ r.get(name).asInstanceOf[B]
@@ -193,7 +193,7 @@ package object query {
     def build(): String \/ QuerySetting
   }
 
-  def create[T](f: MutableBuilder ⇒ Unit)(implicit pool: ExecutorService, q: MongoStreamFactory[T]): MongoStream[T, DBObject] = {
+  def create[T](f: MutableBuilder ⇒ Unit)(implicit pool: ExecutorService, q: MongoStreamFactory[T]): DBChannel[T, DBObject] = {
     val builder = new MutableBuilder {
       override def build(): String \/ QuerySetting =
         for {
@@ -210,10 +210,10 @@ package object query {
 
   //default
   implicit object default extends MongoStreamFactory[MongoClient] {
-    override def createMStream(arg: String \/ QuerySetting)(implicit pool: ExecutorService): MongoStream[MongoClient, DBObject] = {
+    override def createMStream(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[MongoClient, DBObject] = {
       arg match {
         case \/-(setting) ⇒
-          MongoStream(eval(Task now { client: MongoClient ⇒
+          DBChannel(eval(Task now { client: MongoClient ⇒
             Task {
               val logger = Logger.getLogger("query")
               scalaz.stream.io.resource(
@@ -239,7 +239,7 @@ package object query {
             }
           }))
 
-        case -\/(error) ⇒ MongoStream(eval(Task.fail(new MongoException(error))))
+        case -\/(error) ⇒ DBChannel(eval(Task.fail(new MongoException(error))))
       }
     }
   }

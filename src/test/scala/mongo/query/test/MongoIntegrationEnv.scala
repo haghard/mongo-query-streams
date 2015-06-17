@@ -21,7 +21,7 @@ import java.util.concurrent.{ ThreadLocalRandom, TimeUnit, ExecutorService, Exec
 import de.bwaldvogel.mongo.MongoServer
 import de.bwaldvogel.mongo.backend.memory.MemoryBackend
 import mongo.{ query, NamedThreadFactory }
-import mongo.query.{ MongoStream, MongoStreamFactory, QuerySetting }
+import mongo.query.{ DBChannel, MongoStreamFactory, QuerySetting }
 import org.apache.log4j.Logger
 
 import scala.collection.JavaConversions._
@@ -140,10 +140,10 @@ object MongoIntegrationEnv {
    * used in test cases
    */
   implicit object TestCaseFactory extends MongoStreamFactory[DB] {
-    override def createMStream(arg: String \/ QuerySetting)(implicit pool: ExecutorService): MongoStream[DB, DBObject] = {
+    override def createMStream(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[DB, DBObject] = {
       arg match {
         case \/-(set) ⇒
-          query.MongoStream {
+          query.DBChannel {
             eval(Task.now { db: DB ⇒
               Task {
                 scalaz.stream.io.resource(
@@ -172,7 +172,7 @@ object MongoIntegrationEnv {
               }(pool)
             })
           }
-        case -\/(error) ⇒ query.MongoStream(eval(Task.fail(new MongoException(error))))
+        case -\/(error) ⇒ query.DBChannel(eval(Task.fail(new MongoException(error))))
       }
     }
   }

@@ -16,7 +16,7 @@ package mongo
 
 import java.util.concurrent.ExecutorService
 import com.mongodb.{ DBCursor, DBObject, BasicDBObject, MongoClient }
-import mongo.query.MongoStream
+import mongo.query.DBChannel
 import scala.annotation.tailrec
 import scala.collection.JavaConversions._
 import scalaz.concurrent.Task
@@ -29,7 +29,7 @@ package object dsl3 { outer ⇒
 
   import scalaz.stream.Process
   type MProcess[Out] = Process[Task, Out]
-  type MStream[Out] = MongoStream[MongoClient, Out]
+  type MStream[Out] = DBChannel[MongoClient, Out]
 
   object FetchMode extends Enumeration {
     type Type = Value
@@ -217,7 +217,7 @@ package object dsl3 { outer ⇒
 
       implicit val M = new scalaz.Monad[MStream]() {
         override def point[T](a: ⇒ T): MStream[T] =
-          MongoStream(Process.eval(Task.now { client: MongoClient ⇒
+          DBChannel(Process.eval(Task.now { client: MongoClient ⇒
             Task(Process.eval(Task.delay(a)))
           }))
 
@@ -226,7 +226,7 @@ package object dsl3 { outer ⇒
 
       implicit object MongoStreamer extends Streamer[MStream] {
         override def create[T](q: BasicDBObject, client: MongoClient /*null*/ , db: String, coll: String)(implicit pool: ExecutorService): MStream[T] = {
-          MongoStream(Process.eval(Task.now { client: MongoClient ⇒ Task(mongoR[T](q, client, db, coll)) }))
+          DBChannel(Process.eval(Task.now { client: MongoClient ⇒ Task(mongoR[T](q, client, db, coll)) }))
         }
       }
     }

@@ -17,7 +17,7 @@ package mongo
 import java.util.concurrent.ExecutorService
 
 import com.mongodb.{ BasicDBObject, MongoClient }
-import mongo.query.MongoStream
+import mongo.query.DBChannel
 import org.apache.log4j.Logger
 import scala.reflect.ClassTag
 
@@ -63,7 +63,7 @@ package object join {
   }
 
   trait MongoStreamsT extends STypes {
-    type MStream[Out] = MongoStream[Client, Out]
+    type MStream[Out] = DBChannel[Client, Out]
   }
 
   object MongoStreamsT {
@@ -90,14 +90,14 @@ package object join {
       override def left[A](q: Query.QueryBuilder[BasicDBObject], db: String, coll: String, keyColl: String): MongoStreamsT#MStream[A] = {
         val q0 = (runFC[StatementOp, QueryS, BasicDBObject](q)(Query.QueryInterpreterS)).run(init)._1
         log.info(s"[$db - $coll] query: $q0")
-        MongoStream[MongoClient, A](P.eval(Task.now { client: MongoClient ⇒ Task(resource(q0, client, db, coll)) })).column[A](keyColl)
+        DBChannel[MongoClient, A](P.eval(Task.now { client: MongoClient ⇒ Task(resource(q0, client, db, coll)) })).column[A](keyColl)
       }
 
       override def relation[A, B](r: A ⇒ Query.QueryBuilder[BasicDBObject], db: String, coll: String): A ⇒ MongoStreamsT#MStream[B] =
         id ⇒ {
           val q0 = (runFC[StatementOp, QueryS, BasicDBObject](r(id))(Query.QueryInterpreterS)).run(init)._1
           log.info(s"[$db - $coll] query $q0")
-          MongoStream[MongoClient, B](P.eval(Task.now { client: MongoClient ⇒ Task(resource(q0, client, db, coll)) }))
+          DBChannel[MongoClient, B](P.eval(Task.now { client: MongoClient ⇒ Task(resource(q0, client, db, coll)) }))
         }
 
       override def innerJoin[A, B, C](l: MongoStreamsT#MStream[A])(relation: A ⇒ MongoStreamsT#MStream[B])(f: (A, B) ⇒ C): MongoStreamsT#MStream[C] =
