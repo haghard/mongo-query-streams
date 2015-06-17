@@ -95,7 +95,12 @@ Using package dsl3 you can easy fetch one or batch with `scalaz.concurrent.Task`
     //scalar result
     p.findOne(client, DB_NAME, PRODUCT).attemptRun
     //batch result
-    p.list(client, DB_NAME, PRODUCT).attemptRun
+    p.list(client, DB_NAME, PRODUCT).attemptRun    
+    
+    //or stream    
+    val buf = Buffer.empty[BasicDBObject]
+    val sink = io.fillBuffer(buf)
+    (p.stream[MProcess](TEST_DB, LANGS) to sink).run.attemptRun
 ```  
 
 Here's a basic example how to build query, run and get results:

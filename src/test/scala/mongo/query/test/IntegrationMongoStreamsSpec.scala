@@ -82,7 +82,7 @@ class IntegrationMongoStreamsSpec extends Specification {
     val buf = Buffer.empty[BasicDBObject]
     val sink = io.fillBuffer(buf)
 
-    val out = (q.stream[SProc](TEST_DB, LANGS) to sink).run.attemptRun
+    val out = (q.stream[MProcess](TEST_DB, LANGS) to sink).run.attemptRun
     out should be equalTo \/-(())
     langs.size === buf.size
   }

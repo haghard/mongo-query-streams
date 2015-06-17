@@ -28,7 +28,7 @@ import scala.collection.JavaConversions.mapAsScalaMap
 package object dsl3 { outer ⇒
 
   import scalaz.stream.Process
-  type SProc[Out] = Process[Task, Out]
+  type MProcess[Out] = Process[Task, Out]
   type MStream[Out] = MongoStream[MongoClient, Out]
 
   object FetchMode extends Enumeration {
@@ -210,8 +210,8 @@ package object dsl3 { outer ⇒
         }
       }
 
-      implicit object ProcStreamer extends Streamer[SProc] {
-        override def create[T](q: BasicDBObject, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): SProc[T] =
+      implicit object ProcStreamer extends Streamer[MProcess] {
+        override def create[T](q: BasicDBObject, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): MProcess[T] =
           mongoR[T](q, client, db, coll)
       }
 
