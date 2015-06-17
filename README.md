@@ -79,7 +79,7 @@ Using monadic query composition
     query.toDBObject    
 ```
 
-Using package dsl3 you can easy fetch one or batch  
+Using package dsl3 you can easy fetch one or batch with `scalaz.concurrent.Task`  
 
 ```scala
     import mongo._
@@ -98,7 +98,7 @@ Using package dsl3 you can easy fetch one or batch
     p.list(client, DB_NAME, PRODUCT).attemptRun
 ```  
 
-Here's a basic example how to use processes for simple query:
+Here's a basic example how to build query, run and get results:
 
 ```scala
   import mongo_  
@@ -113,8 +113,7 @@ Here's a basic example how to use processes for simple query:
   val buffer: Buffer[Int] = Buffer.empty
   val sink = scalaz.stream.io.fillBuffer(buffer)
   
-  implicit val exec = 
-    Executors.newFixedThreadPool(5, new NamedThreadFactory("mongo-worker"))
+  implicit val exec = newFixedThreadPool(2, new NamedThreadFactory("db-worker"))
 
   val products = create { b ⇒
     b.q("article" $gt 2 $lt 40)
@@ -127,8 +126,8 @@ Here's a basic example how to use processes for simple query:
     _ ← article to sink
    } yield ())          
     .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
-   .onComplete(P.eval(Task.delay(logger.debug(s"Interaction has been completed"))))
-   .run.run
+    .onComplete(P.eval(Task.delay(logger.debug(s"Interaction has been completed"))))
+    .run.run
    
   //result here
   buffer
@@ -153,7 +152,7 @@ Here's a example of how you can do join between collections `LANGS` and `PROGRAM
   val qLang = for { q ← "index" $gte 0 $lte 5 } yield q
   def qProg(id: Int) = for { q ← "lang" $eq id } yield q
   
-  implicit val exec = newFixedThreadPool(2, new NamedThreadFactory("mongo-worker"))
+  implicit val exec = newFixedThreadPool(2, new NamedThreadFactory("db-worker"))
   implicit val c = client
   val joiner = Join[MongoStreamsT]
       
@@ -170,7 +169,7 @@ Here's a example of how you can do join between collections `LANGS` and `PROGRAM
   
 ```
 
-Join using `Observable`
+Join using `rx.Observable`
 
 ```scala
 
@@ -188,9 +187,10 @@ Join using `Observable`
   val qLang = for { q ← "index" $gte 0 $lte 5 } yield q
   def qProg(id: Int) = for { q ← "lang" $eq id } yield q
   
-  implicit val exec = newFixedThreadPool(2, new NamedThreadFactory("mongo-worker"))
+  implicit val exec = newFixedThreadPool(2, new NamedThreadFactory("db-worker"))
   implicit val c = client
   val joiner = Join[MongoObservableT]
+  
   val query = joiner.join(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
     s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
   }

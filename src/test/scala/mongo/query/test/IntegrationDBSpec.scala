@@ -40,8 +40,6 @@ trait Enviroment[T] extends org.specs2.mutable.Before {
 
 class IntegrationMongoCleanUpSpec extends Specification {
   import MongoIntegrationEnv._
-  //import TestCaseFactory extends MStreamFactory[DB]
-
   private val logger = Logger.getLogger(classOf[IntegrationMongoCleanUpSpec])
 
   private def producers(id: Int) =
@@ -135,7 +133,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
       b.q(Obj("article" -> 1).toString)
       b.collection(PRODUCT)
       b.db(TEST_DB)
-    } //|> categoryIds
+    }
 
     val p = for {
       dbObject ← Resource.through(qProds.innerJoinRaw(categories(_)) { (l, r) ⇒
@@ -145,15 +143,6 @@ class IntegrationMongoCleanUpSpec extends Specification {
         _ + "/" + _
       } to sink
     } yield ()
-
-    /*val p = for {
-      dbObject ← Resource through (
-        for {
-          n ← prodsWithCategoryIds
-          prod ← categories(n)
-        } yield (prod)).out
-      _ ← dbObject.fold1 { _ + "/" + _ } to sink
-    } yield ()*/
 
     p.run.run
     buffer(0) must be equalTo
@@ -169,17 +158,12 @@ class IntegrationMongoCleanUpSpec extends Specification {
       b.q(Obj("article" -> Obj(($in(), List(1, 2)))).toString)
       b.collection(PRODUCT)
       b.db(TEST_DB)
-    } //|> categoryIds
+    }
 
     val p = for {
       dbObject ← Resource through (prodsWithCategoryIds.innerJoinRaw(categories(_))((l, r) ⇒ r.get("name").asInstanceOf[String]).out)
       _ ← dbObject.foldMap(_ + ", ") to sink
     } yield ()
-
-    /*val p = for {
-      dbObject ← Resource through ((for { n ← prodsWithCategoryIds; prod ← categories0(n._2) } yield (prod)).out)
-      _ ← dbObject.foldMap(_.get("name").asInstanceOf[String] + ", ") to sink
-    } yield ()*/
 
     p.run.run
     logger.debug(buffer(0))
@@ -204,15 +188,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
     buffer must be equalTo ArrayBuffer(2, 3)
   }
 
-  "Hit server with zip. Run 2 independent query sequentially and merge results in single value" in new Enviroment[String] {
-
-    //if one process halts, so second process will halt too
-    //even he didn't exhausted
-    val resultTransducer = process1.lift({ pair: (DBObject, DBObject) ⇒
-      pair._1.get("article").asInstanceOf[Int].toString + "-" +
-        pair._2.get("category").asInstanceOf[Int].toString
-    })
-
+  "Hit server with zip. Deterministic merge 2 streams in single value" in new Enviroment[String] {
     val products = create { b ⇒
       b.q("article" $eq 1)
       b.collection(PRODUCT)
@@ -235,7 +211,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
     buffer(0) must be equalTo "1-12"
   }
 
-  "Hit server with zipWith" in new Enviroment[String] {
+  "Hit server with zipWith. Deterministic merge 2 streams in single value with function" in new Enviroment[String] {
     //if one process halts, so second process will halt too
     implicit val dataExtracter = { (a: DBObject, b: DBObject) ⇒
       a.get("article").asInstanceOf[Int] + "-" +

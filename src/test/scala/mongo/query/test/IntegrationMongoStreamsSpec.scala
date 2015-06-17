@@ -16,10 +16,9 @@ package mongo.query.test
 
 import com.mongodb.{ BasicDBObject, DBObject, MongoClient }
 import de.bwaldvogel.mongo.MongoServer
-import mongo.dsl3._
 import mongo.query.test.MongoIntegrationEnv._
 import org.specs2.mutable.Specification
-import scala.collection.mutable.{ ArrayBuffer, Buffer }
+import scala.collection.mutable.Buffer
 import scalaz.\/-
 import scalaz.concurrent.Task
 import scalaz.stream.io
