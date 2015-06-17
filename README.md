@@ -160,12 +160,13 @@ Here's a example of how you can do join between collections `LANGS` and `PROGRAM
     s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
   }
           
-  val p = for {
+  for {
     e ← Process.eval(Task.delay(client)) through query.out
     _ ← e to Sink
   } yield ()
-    
-  p.run.run
+    .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
+    .onComplete(P.eval(Task.delay(logger.debug(s"Interaction has been completed"))))
+    .run.run      
   
 ```
 
