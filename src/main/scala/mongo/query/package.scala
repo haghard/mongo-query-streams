@@ -80,7 +80,7 @@ package object query {
      * @param f
      * @tparam B
      * @tparam C
-     * @return MongoStream[T, C]
+     * @return DBChannel[T, C]
      */
     def zipWith[B, C](stream: DBChannel[T, B])(implicit f: (A, B) ⇒ C): DBChannel[T, C] = DBChannel {
       val zipper: ((T ⇒ Task[Process[Task, A]], T ⇒ Task[Process[Task, B]]) ⇒ (T ⇒ Task[Process[Task, C]])) = {
@@ -111,7 +111,7 @@ package object query {
      *
      * @param stream
      * @tparam B
-     * @return MongoStream[T, (A, B)]
+     * @return DBChannel[T, (A, B)]
      */
     def zip[B](stream: DBChannel[T, B]): DBChannel[T, (A, B)] = zipWith(stream)((_, _))
 
@@ -139,8 +139,8 @@ package object query {
      * Allows you to extract specified field from [[DBObject]] by name with type cast
      * @param name field name
      * @tparam B  field type
-     * @throws `MongoException` If item is not a `DBObject`.
-     * @return `MongoStream[T, B]`
+     * @throws MongoException If item is not a `DBObject`.
+     * @return DBChannel[T, B]
      */
     def column[B](name: String): DBChannel[T, B] = {
       pipe(lift { record ⇒
