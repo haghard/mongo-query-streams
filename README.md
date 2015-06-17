@@ -79,13 +79,14 @@ Using monadic query composition
     query.toDBObject    
 ```
 
-Using package dsl3 you can easy fetch one or batch with `scalaz.concurrent.Task`  
+Using package dsl3 you can easy fetch one/batch/stream  
 
 ```scala
     import mongo._
     import dsl3._
     import Query._
     import Interaction._
+    import rx.lang.scala.{ Observable, Subscriber }
   
     val query = for {
       _ ← "producer_num" $eq 1
@@ -94,19 +95,17 @@ Using package dsl3 you can easy fetch one or batch with `scalaz.concurrent.Task`
     
     //scalar result
     query.findOne(client, DB_NAME, PRODUCT).attemptRun
+    
     //batch result
     query.list(client, DB_NAME, PRODUCT).attemptRun    
     
     //or stream of BasicDBObject     
-    val buf = Buffer.empty[BasicDBObject]
-    val sink = io.fillBuffer(buf)
-    (query.stream[MProcess](TEST_DB, LANGS) to sink).run.attemptRun
+    query.stream[MProcess](TEST_DB, LANGS)
     
     //or stream of Strings from field "f" using Process
     query.streamC[MStream](TEST_DB, LANGS).column[String]("f")    
     
-    //or stream of Int from field "f2" using Observable
-    import rx.lang.scala.{ Observable, Subscriber }
+    //or stream of Int from field "f2" using Observable    
     query.streamC[Observable](TEST_DB, LANGS).column[Int]("f2")
     
 ```  
