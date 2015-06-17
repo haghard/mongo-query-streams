@@ -102,13 +102,10 @@ Using package dsl3 you can easy fetch one or batch with `scalaz.concurrent.Task`
     val sink = io.fillBuffer(buf)
     (query.stream[MProcess](TEST_DB, LANGS) to sink).run.attemptRun
     
-    //or stream of Strings from collection field "f" with Process
-    (for {
-      e ← P.eval(Task.delay(client)) through (query.streamC[MStream](TEST_DB, LANGS).column[String]("f").out)
-       _ ← e to Sink
-    } yield ()).run.run
+    //or stream of Strings from field "f" using Process
+    query.streamC[MStream](TEST_DB, LANGS).column[String]("f")    
     
-    //or stream of Inf from field "f2" with Observable
+    //or stream of Int from field "f2" using Observable
     import rx.lang.scala.{ Observable, Subscriber }
     query.streamC[Observable](TEST_DB, LANGS).column[Int]("f2")
     
