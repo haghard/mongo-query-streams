@@ -7,7 +7,7 @@ Design goals:
   * Provide mongo query creation in type safe manner
   * Write resource safe code
   * Use compositionality, expressiveness of scalaz-streams as advantage in mongo querying
-  * Consider the result as [ScalazStream](https://github.com/scalaz/scalaz-stream) or [RxScala].
+  * Consider the result as [ScalazStream](https://github.com/scalaz/scalaz-stream) or [RxScala](https://github.com/ReactiveX/RxScala.git).
 
 Getting Started
 ===================
