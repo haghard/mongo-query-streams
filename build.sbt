@@ -6,7 +6,7 @@ organization := "org.mongo.scalaz"
 
 name := "mongo-query-streams"
 
-version := "0.6.2"
+version := "0.6.3-snapshot"
 
 scalaVersion := "2.11.6"
 
@@ -86,7 +86,7 @@ licenses += ("Apache-2.0", url("http://www.apache.org/licenses/"))
 
 bintrayOrganization in bintray := Some("haghard")
 
-repository in bintray := "releases" //"snapshots"
+repository in bintray := "snapshots" //"releases"
 
 publishMavenStyle := true
 //publishTo := Some(Resolver.file("file",  new File(localMvnRepo)))
