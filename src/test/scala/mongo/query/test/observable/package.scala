@@ -66,7 +66,7 @@ package object observable {
     }
   }
 
-  trait MongoObservableT extends join.STypes {
+  trait MongoObservableT extends join.DBTypes {
     type MStream[Out] = Observable[Out]
   }
 

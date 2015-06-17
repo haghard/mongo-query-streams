@@ -25,7 +25,7 @@ package object join {
   import scala.language.higherKinds
   import mongo.dsl3._
 
-  trait STypes {
+  trait DBTypes {
     type Client = MongoClient
     type MStream[A] <: {
       def map[B](f: A ⇒ B): MStream[B]
@@ -35,7 +35,7 @@ package object join {
 
   private val init = new BasicDBObject
 
-  abstract class Joiner[T <: STypes] {
+  abstract class Joiner[T <: DBTypes] {
     protected var log: Logger = null
     protected var client: T#Client = null
     protected var exec: ExecutorService = null
@@ -62,7 +62,7 @@ package object join {
     def innerJoin[A, B, C](l: T#MStream[A])(relation: A ⇒ T#MStream[B])(f: (A, B) ⇒ C): T#MStream[C]
   }
 
-  trait MongoStreamsT extends STypes {
+  trait MongoStreamsT extends DBTypes {
     type MStream[Out] = DBChannel[Client, Out]
   }
 
@@ -110,11 +110,11 @@ package object join {
   }
 
   object Joiner {
-    def apply[T <: STypes](implicit j: Joiner[T], c: T#Client, log: Logger, pool: ExecutorService): Joiner[T] =
+    def apply[T <: DBTypes](implicit j: Joiner[T], c: T#Client, log: Logger, pool: ExecutorService): Joiner[T] =
       j.withExecutor(pool).withLogger(log).withClient(c)
   }
 
-  case class Join[T <: STypes: Joiner](implicit pool: ExecutorService, c: T#Client, t: ClassTag[T]) {
+  case class Join[T <: DBTypes: Joiner](implicit pool: ExecutorService, c: T#Client, t: ClassTag[T]) {
     implicit val logger = Logger.getLogger(s"${t.runtimeClass.getName.dropWhile(_ != '$').drop(1)}-Joiner")
     private val joiner = Joiner[T]
 
