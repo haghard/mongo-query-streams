@@ -87,20 +87,31 @@ Using package dsl3 you can easy fetch one or batch with `scalaz.concurrent.Task`
     import Query._
     import Interaction._
   
-    val p = for {
+    val query = for {
       _ ← "producer_num" $eq 1
       q ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
     } yield q
     
     //scalar result
-    p.findOne(client, DB_NAME, PRODUCT).attemptRun
+    query.findOne(client, DB_NAME, PRODUCT).attemptRun
     //batch result
-    p.list(client, DB_NAME, PRODUCT).attemptRun    
+    query.list(client, DB_NAME, PRODUCT).attemptRun    
     
-    //or stream    
+    //or stream of BasicDBObject     
     val buf = Buffer.empty[BasicDBObject]
     val sink = io.fillBuffer(buf)
-    (p.stream[MProcess](TEST_DB, LANGS) to sink).run.attemptRun
+    (query.stream[MProcess](TEST_DB, LANGS) to sink).run.attemptRun
+    
+    //or stream of Strings from collection field "f" with Process
+    (for {
+      e ← P.eval(Task.delay(client)) through (query.streamC[MStream](TEST_DB, LANGS).column[String]("f").out)
+       _ ← e to Sink
+    } yield ()).run.run
+    
+    //or stream of Inf from field "f2" with Observable
+    import rx.lang.scala.{ Observable, Subscriber }
+    query.streamC[Observable](TEST_DB, LANGS).column[Int]("f2")
+    
 ```  
 
 Here's a basic example how to build query, run and get results:

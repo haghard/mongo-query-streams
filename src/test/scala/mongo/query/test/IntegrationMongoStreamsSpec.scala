@@ -49,6 +49,7 @@ class IntegrationMongoStreamsSpec extends Specification {
   import MongoIntegrationEnv._
   import Streamer._
   import scalaz.stream.Process
+  val P = scalaz.stream.Process
 
   "Build query and perform findOne" in new MongoStreamsEnviroment {
     initMongo
@@ -97,13 +98,12 @@ class IntegrationMongoStreamsSpec extends Specification {
     val Sink = io.fillBuffer(buffer)
 
     val p = (for {
-      element ← Process.eval(Task.delay(client))
-        .through(query.streamC[MStream](TEST_DB, LANGS).column[String](field).out)
+      element ← P.eval(Task.delay(client)) through (query.streamC[MStream](TEST_DB, LANGS).column[String](field).out)
       _ ← element to Sink
     } yield ())
 
-    p.onFailure(th ⇒ Process.eval(Task.delay(logger.info(s"Exception: ${th.getMessage}"))))
-      .onComplete(Process.eval(Task.delay(logger.info(s"Interaction has been completed"))))
+    p.onFailure(th ⇒ P.eval(Task.delay(logger.info(s"Exception: ${th.getMessage}"))))
+      .onComplete(P.eval(Task.delay(logger.info(s"Interaction has been completed"))))
       .runLog.run
 
     langs.size === buffer.size
@@ -125,12 +125,12 @@ class IntegrationMongoStreamsSpec extends Specification {
       .innerJoin(qProgByLang(_).streamC[MStream](TEST_DB, PROGRAMMERS).column[String]("name")) { (ind, p) ⇒ s"[lang:$ind/person:$p]" }
 
     val p = for {
-      element ← Process.eval(Task.delay(client)) through query.out
+      element ← P.eval(Task.delay(client)) through query.out
       _ ← element to Sink
     } yield ()
 
-    p.onFailure(th ⇒ Process.eval(Task.delay(logger.info(s"Exception: ${th.getMessage}"))))
-      .onComplete(Process.eval(Task.delay(logger.info(s"Interaction has been completed"))))
+    p.onFailure(th ⇒ P.eval(Task.delay(logger.info(s"Exception: ${th.getMessage}"))))
+      .onComplete(P.eval(Task.delay(logger.info(s"Interaction has been completed"))))
       .runLog.run
 
     logger.info(buffer)
@@ -151,12 +151,12 @@ class IntegrationMongoStreamsSpec extends Specification {
     }
 
     val p = for {
-      element ← Process.eval(Task.delay(client)) through query.out
+      element ← P.eval(Task.delay(client)) through query.out
       _ ← element to Sink
     } yield ()
 
-    p.onFailure(th ⇒ Process.eval(Task.delay(logger.info(s"Exception: ${th.getMessage}"))))
-      .onComplete(Process.eval(Task.delay(logger.info(s"Interaction has been completed"))))
+    p.onFailure(th ⇒ P.eval(Task.delay(logger.info(s"Exception: ${th.getMessage}"))))
+      .onComplete(P.eval(Task.delay(logger.info(s"Interaction has been completed"))))
       .runLog.run
 
     logger.info(buffer)
