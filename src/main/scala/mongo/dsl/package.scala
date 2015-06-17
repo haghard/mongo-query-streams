@@ -15,8 +15,6 @@
 package mongo
 
 import com.mongodb.BasicDBObject
-import org.apache.log4j.Logger
-
 import scalaz.concurrent.Task
 import scalaz.~>
 import com.mongodb.DBObject
@@ -26,8 +24,6 @@ import scalaz.Free.liftF
 import scalaz.{ Free, Functor }
 
 package object dsl {
-  private val logger = Logger.getLogger("dsl")
-
   type FreeQuery[T] = Free[QueryAlg, T]
   type QueryState[T] = scalaz.State[BasicDBObject, T]
 
@@ -68,12 +64,8 @@ package object dsl {
   //program.runM(step)
   def step[T](op: QueryAlg[FreeQuery[T]]): Task[FreeQuery[T]] =
     op match {
-      case EqFragment(q, next) ⇒ Task now {
-        logger.debug(q); q
-      } map (next)
-      case ComposableFragment(q, next) ⇒ Task now {
-        logger.debug(q); q
-      } map (next)
+      case EqFragment(q, next)         ⇒ Task.now(q).map(next)
+      case ComposableFragment(q, next) ⇒ Task.now(q).map(next)
     }
 
   /**

@@ -48,14 +48,14 @@ class IntegrationMongoStreamsSpec extends Specification {
   import Query._
   import Interaction._
   import MongoIntegrationEnv._
-  import StreamerFactory._
+  import Streamer._
   import scalaz.stream.Process
 
   "Build query and perform findOne" in new MongoStreamsEnviroment {
     initMongo
 
     val p = for { q ← "index" $eq 0 } yield q
-    val out = p.one(client, TEST_DB, LANGS).attemptRun
+    val out = p.findOne(client, TEST_DB, LANGS).attemptRun
 
     out.isRight === true
     out.toOption.get.isRight === true

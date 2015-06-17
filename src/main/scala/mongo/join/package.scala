@@ -27,13 +27,15 @@ package object join {
 
   trait STypes {
     type Client = MongoClient
-    type MStream[Out]
+    type MStream[A] <: {
+      def map[B](f: A ⇒ B): MStream[B]
+      def flatMap[B](f: A ⇒ MStream[B]): MStream[B]
+    }
   }
 
   private val init = new BasicDBObject
 
   abstract class Joiner[T <: STypes] {
-    //
     protected var log: Logger = null
     protected var client: T#Client = null
     protected var exec: ExecutorService = null
@@ -67,9 +69,9 @@ package object join {
   object MongoStreamsT {
     import scalaz.Free.runFC
     import scalaz.concurrent.Task
-    import scalaz.stream.process1.lift
     import scalaz.stream.{ Cause, io, Process }
     import Query.StatementOp
+    import scalaz.stream.process1.lift
     val P = scalaz.stream.Process
 
     implicit object joiner extends Joiner[MongoStreamsT] {
@@ -99,7 +101,11 @@ package object join {
         }
 
       override def innerJoin[A, B, C](l: MongoStreamsT#MStream[A])(relation: A ⇒ MongoStreamsT#MStream[B])(f: (A, B) ⇒ C): MongoStreamsT#MStream[C] =
-        l.flatMap { id ⇒ relation(id) |> lift(f(id, _)) }
+        for {
+          id ← l
+          rs ← relation(id) |> lift(f(id, _))
+        } yield rs
+      //l.flatMap { id ⇒ relation(id) |> lift(f(id, _)) }
     }
   }
 
@@ -108,16 +114,15 @@ package object join {
       j.withExecutor(pool).withLogger(log).withClient(c)
   }
 
-  final class Join[T <: STypes: Joiner](implicit pool: ExecutorService, t: ClassTag[T], c: T#Client) {
+  case class Join[T <: STypes: Joiner](implicit pool: ExecutorService, c: T#Client, t: ClassTag[T]) {
     implicit val logger = Logger.getLogger(s"${t.runtimeClass.getName.dropWhile(_ != '$').drop(1)}-Joiner")
     private val joiner = Joiner[T]
 
     def join[A, B, C](lq: Query.QueryBuilder[BasicDBObject], lColl: String, keyColl: String,
                       rq: A ⇒ Query.QueryBuilder[BasicDBObject], rColl: String,
                       db: String)(f: (A, B) ⇒ C): T#MStream[C] = {
-      logger.info("JoinProgram")
+      logger.info("Join-Program")
       joiner.innerJoin[A, B, C](joiner.left[A](lq, db, lColl, keyColl))(joiner.relation[A, B](rq, db, rColl))(f)
     }
-
   }
 }

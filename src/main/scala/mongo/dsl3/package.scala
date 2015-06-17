@@ -193,12 +193,12 @@ package object dsl3 { outer ⇒
     val intInterpreter: Interaction.InteractionApp ~> Id = BatchTrans ||: ApacheLog4jTrans ||: qInterpreterFree
     val intInterpreterCoyo: Interaction.CoyoApp ~> Id = liftCoyoLeft(intInterpreter)
 
-    trait StreamerFactory[M[_]] {
+    trait Streamer[M[_]] {
       protected val logger = org.apache.log4j.Logger.getLogger("mongo-query")
       def create[T](q: BasicDBObject, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): M[T]
     }
 
-    object StreamerFactory {
+    object Streamer {
       private def mongoR[T](q: BasicDBObject, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): Process[Task, T] = {
         io.resource(Task.delay(client.getDB(db).getCollection(coll).find(q)))(c ⇒ Task.delay(c.close)) { c ⇒
           Task {
@@ -210,7 +210,7 @@ package object dsl3 { outer ⇒
         }
       }
 
-      implicit object ProcStreamer extends StreamerFactory[SProc] {
+      implicit object ProcStreamer extends Streamer[SProc] {
         override def create[T](q: BasicDBObject, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): SProc[T] =
           mongoR[T](q, client, db, coll)
       }
@@ -224,7 +224,7 @@ package object dsl3 { outer ⇒
         override def bind[T, B](fa: MStream[T])(f: (T) ⇒ MStream[B]) = fa flatMap f
       }
 
-      implicit object MongoStreamer extends StreamerFactory[MStream] {
+      implicit object MongoStreamer extends Streamer[MStream] {
         override def create[T](q: BasicDBObject, client: MongoClient /*null*/ , db: String, coll: String)(implicit pool: ExecutorService): MStream[T] = {
           MongoStream(Process.eval(Task.now { client: MongoClient ⇒ Task(mongoR[T](q, client, db, coll)) }))
         }
@@ -236,7 +236,7 @@ package object dsl3 { outer ⇒
     import outer.Interaction._
     import scalaz.Monad
 
-    def one(client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService) =
+    def findOne(client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService) =
       Task(program(self, client, db, coll, FetchMode.One)
         .foldMap(Trampolined compose intInterpreterCoyo).run)(pool)
 
@@ -254,7 +254,7 @@ package object dsl3 { outer ⇒
      * @tparam M
      * @return
      */
-    def stream[M[_]: Monad](db: String, coll: String)(implicit f: StreamerFactory[M], pool: ExecutorService, client: MongoClient): M[BasicDBObject] =
+    def stream[M[_]: Monad](db: String, coll: String)(implicit f: Streamer[M], pool: ExecutorService, client: MongoClient): M[BasicDBObject] =
       f.create((scalaz.Free.runFC[Query.StatementOp, QueryS, BasicDBObject](self)(Query.QueryInterpreterS)).run(outer.Query.init)._1,
         client, db, coll)
 
@@ -268,15 +268,9 @@ package object dsl3 { outer ⇒
      * @tparam M
      * @return
      */
-    def streamC[M[_]: Monad](db: String, coll: String)(implicit f: StreamerFactory[M], pool: ExecutorService, client: MongoClient): M[BasicDBObject] = {
+    def streamC[M[_]: Monad](db: String, coll: String)(implicit f: Streamer[M], pool: ExecutorService, client: MongoClient): M[BasicDBObject] = {
       f.create((scalaz.Free.runFC[Query.StatementOp, QueryS, BasicDBObject](self)(Query.QueryInterpreterS)).run(outer.Query.init)._1,
         client, db, coll)
     }
-
-    /*def streamM(db: String, coll: String)(implicit pool: ExecutorService): MongoStream[MongoClient, BasicDBObject] =
-      MongoStream(Process.eval(Task.now { client: MongoClient ⇒
-        Task(self.stream[SProc](db, coll))
-      }))*/
-
   }
 }

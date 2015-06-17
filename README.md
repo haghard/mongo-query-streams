@@ -24,6 +24,18 @@ Examples
 ===================
 There are several way to create mongo query in type safe manner and treat it like a scalaz-stream process
 
+Using native query which will be parser and validated
+
+```scala
+    import mongo.query._
+    create { b ⇒
+      b.q(""" { "article" : 1 } """)
+      b.collection("tmp")
+      b.db("test_db")
+    }
+    
+```
+
 Using mongo.dsl._
 ```scala
     import mongo._
@@ -61,11 +73,13 @@ Using monadic query composition
     x ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
     } yield x
     
-    query.toQuery
+    //string 
+    query.toQuery    
+    //DBObject
     query.toDBObject    
 ```
 
-Using dsl3 you can easy fetch one or batch  
+Using package dsl3 you can easy fetch one or batch  
 
 ```scala
     import mongo._
@@ -77,23 +91,12 @@ Using dsl3 you can easy fetch one or batch
       _ ← "producer_num" $eq 1
       q ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
     } yield q
-  
-  
-    p.one(client, DB_NAME, PRODUCT).attemptRun
-    p.list(client, DB_NAME, PRODUCT).attemptRun  
-```  
-
-Using native query
-
-```scala
-    import mongo.query._
-    create { b ⇒
-      b.q(""" { "article" : 1 } """)
-      b.collection("tmp")
-      b.db("test_db")
-    }
     
-```
+    //scalar result
+    p.findOne(client, DB_NAME, PRODUCT).attemptRun
+    //batch result
+    p.list(client, DB_NAME, PRODUCT).attemptRun
+```  
 
 Here's a basic example how to use processes for simple query:
 
@@ -104,88 +107,104 @@ Here's a basic example how to use processes for simple query:
   import scalaz.concurrent.Task
   import scalaz.stream.process._
 
-  val client: MongoClient ...
+  val client: MongoClient = ...
   val Resource = eval(Task.delay(client))
   
-  val buffer: Buffer[String] = Buffer.empty
+  val buffer: Buffer[Int] = Buffer.empty
   val sink = scalaz.stream.io.fillBuffer(buffer)
-  val nameTransducer = process1.lift({ obj: DBObject ⇒ obj.get("name").toString })
   
-  implicit val mongoExecutor = 
+  implicit val exec = 
     Executors.newFixedThreadPool(5, new NamedThreadFactory("mongo-worker"))
 
   val products = create { b ⇒
     b.q("article" $gt 2 $lt 40)
     b.collection(PRODUCT)
-    b.db("test_db")
-  }
-
-  val p = for {
-    dbObject <- Resource through (products |> nameTransducer).channel
-    _ <- observe EnvLogger to sink
-  } yield ()
+    b.db(TEST_DB)
+  }.column[Int]("article")
   
-  p.onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
-   .onComplete { eval(Task.delay(logger.debug(s"Interaction has been completed"))) }
-   .runLog.run
+   (for {
+    article ← Resource through products.out
+    _ ← article to sink
+   } yield ())          
+    .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
+   .onComplete(P.eval(Task.delay(logger.debug(s"Interaction has been completed"))))
+   .run.run
    
   //result here
   buffer
    
 ```
 
-Big win there is that `products` value incapsulates a full lifecycle of working
-with mongo client (get db by name, get collection by name, submit query with preferences, 
-fetch records from cursor, close the cursor when he is exhausted). Cursor will be closed even
-in exception case.
+Big win there is that `products` value incapsulates a full interaction lifecycle for with mongo client (get db by name, get collection by name, submit query with preferences, fetch records from cursor, close the cursor). If exception occurs cursor will be closed.
 
+We do support join between 2 collections and 2 different streaming library RxScala and ScalazStreams through single type `mongo.join.Join` which can by parametrized with `MongoStreamsT` on `MongoObservableT`   
 
-Here's a example of how you can do join between two collections:
+Here's a example of how you can do join between collections `LANGS` and `PROGRAMMERS` by `LANGS.index == PROGRAMMERS.lang` using `Scalaz Streams`
 
 ```scala
-  import mongo_  
-  import dsl._
-  import scalaz.concurrent.Task
-  import scalaz.stream.process._
-  import scalaz._
-  import Scalaz._
-  implicit val M = scalaz.Monoid[String]
-  
-  def EnvLogger(): scalaz.stream.Sink[Task, String] = ...
-   
-  val client: MongoClient ...
-  val Resource = eval(Task.delay(client))
+  import mongo._
+  import join._
+  import dsl3._
+  import Query._
 
-  def categories(e: (String, Buffer[Int])) = {
-    create { b ⇒
-      b.q("category" $in e._2)
-      b.sort("name" $eq -1)
-      b.collection(CATEGORY)
-      b.db(DB_NAME)
-    }
-  }
+  val buffer = Buffer.empty[String]
+  val Sink = io.fillBuffer(buffer)
     
-  val prodsWithCatIds = create { b ⇒
-    b.q(Obj("article" -> 1).toString)
-    b.collection(PRODUCT)
-    b.db(DB_NAME)
+  val qLang = for { q ← "index" $gte 0 $lte 5 } yield q
+  def qProg(id: Int) = for { q ← "lang" $eq id } yield q
+  
+  implicit val exec = newFixedThreadPool(2, new NamedThreadFactory("mongo-worker"))
+  implicit val c = client
+  val joiner = Join[MongoStreamsT]
+      
+  val query = joiner.join(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
+    s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
   }
-    
+          
   val p = for {
-    dbObject ← Resource through
-      (for {
-        n ← prodsWithCatIds
-        prod ← categories(n)
-      } yield (prod)).channel
-    _ ← dbObject.foldMap(_.get("name").asInstanceOf[String] + ", ") observe EnvLogger to sink
+    e ← Process.eval(Task.delay(client)) through query.out
+    _ ← e to Sink
   } yield ()
     
-  p.onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
-    .onComplete { eval(Task.delay(logger.debug(s"Interaction has been completed"))) }
-    .runLog.run
+  p.run.run
+  
+```
 
-  //result here
-  buffer
+Join using `Observable`
+
+```scala
+
+  import mongo._
+  import join._
+  import dsl3._
+  import Query._
+  import rx.lang.scala.Subscriber
+  import mongo.query.test.observable.MongoObservableT
+  import rx.lang.scala.schedulers.ExecutionContextScheduler
+  
+  val buffer = Buffer.empty[String]
+  val Sink = io.fillBuffer(buffer)
+      
+  val qLang = for { q ← "index" $gte 0 $lte 5 } yield q
+  def qProg(id: Int) = for { q ← "lang" $eq id } yield q
+  
+  implicit val exec = newFixedThreadPool(2, new NamedThreadFactory("mongo-worker"))
+  implicit val c = client
+  val joiner = Join[MongoObservableT]
+  val query = joiner.join(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
+    s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
+  }
+  
+  val testSubs = new Subscriber[String] {
+    override def onStart(): Unit = request(1)
+    override def onNext(n: String) = request(1)    
+    override def onError(e: Throwable) = logger.info(s"OnError: ${e.getMessage}")
+    override def onCompleted(): Unit = logger.info("Interaction has been completed")          
+  }
+  
+  query.observeOn(ExecutionContextScheduler(ExecutionContext.fromExecutor(executor)))
+    .subscribe(testSubs)
+    
 ```
 
 To run tests:
@@ -205,4 +224,4 @@ Generated files can be found in /target/spec2-reports
 
 Status
 ------
-0.6.1 version
+0.6.2 version

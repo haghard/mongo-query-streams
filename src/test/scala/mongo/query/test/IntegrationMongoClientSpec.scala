@@ -178,13 +178,13 @@ class IntegrationMongoClientSpec extends Specification {
   }
 
   "Hit server with monadic query2" in new TestEnviroment[String] {
-    val program = for {
+    val producers = for {
       _ ← "article" $gt 0 $lt 4
       x ← "producer_num" $gt 0
     } yield x
 
     val products = create { b ⇒
-      b.q(program.toDBObject)
+      b.q(producers.toDBObject)
       b.collection(PRODUCT)
       b.db(TEST_DB)
     }.column[Int]("article").map(_.toString)

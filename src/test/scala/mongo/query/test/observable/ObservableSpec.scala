@@ -20,26 +20,26 @@ import java.util.concurrent.CountDownLatch
 import com.mongodb.BasicDBObject
 import mongo.query.test.{ MongoIntegrationEnv, MongoStreamsEnviroment }
 import org.specs2.mutable.Specification
+import rx.lang.scala.schedulers.ExecutionContextScheduler
 import rx.lang.scala.{ Observable, Subscriber }
 
 import scala.collection.mutable.Buffer
-import scalaz.concurrent.Task
+import scala.concurrent.ExecutionContext
 import scalaz.stream.io
 
 class ObservableSpec extends Specification {
   import mongo._
   import dsl3._
-  import Interaction._
-  import MongoIntegrationEnv._
   import Query._
-  /*
+  import MongoIntegrationEnv._
 
   "Build query and perform streaming using Observable" in new MongoStreamsEnviroment {
     initMongo
 
-    val ExpectedSize = 5
     val batchSize = 3
     var responses = new AtomicInteger(0)
+
+    implicit val cl = client
     val c = new CountDownLatch(1)
     val q = for { ex ← "index" $gte 0 $lt 10 } yield ex
 
@@ -47,26 +47,25 @@ class ObservableSpec extends Specification {
       override def onStart(): Unit = request(batchSize)
       override def onNext(n: BasicDBObject): Unit = {
         logger.info(s"receive $n")
-        responses.incrementAndGet()
-        if (responses.get() % batchSize == 0) {
+        if (responses.incrementAndGet() % batchSize == 0)
           request(batchSize)
-        }
       }
       override def onError(e: Throwable): Unit = {
-        logger.info("OnError: " + e.getMessage)
+        logger.info(s"OnError: ${e.getMessage}")
         c.countDown()
       }
       override def onCompleted(): Unit = {
-        logger.info("OnCompile")
+        logger.info("Interaction has been completed")
         c.countDown()
       }
     }
 
-    Task(q.stream[Observable](client, DB_NAME, LANGS).subscribe(s))(executor) runAsync (_ ⇒ ())
+    q.stream[Observable](TEST_DB, LANGS)
+      .observeOn(ExecutionContextScheduler(ExecutionContext.fromExecutor(executor)))
+      .subscribe(s)
     c.await()
-    ExpectedSize === responses.get()
+    5 === responses.get()
   }
-*/
 
   "One to many join through mongoStream with fixed columns" in new MongoStreamsEnviroment {
     initMongo
@@ -81,7 +80,7 @@ class ObservableSpec extends Specification {
     def qProgByLang(id: Int) = for { q ← "lang" $eq id } yield q
 
     val query = qLang.streamC[Observable](TEST_DB, LANGS).column[Int]("index")
-      .leftJoin(qProgByLang(_).streamC[Observable](TEST_DB, PROGRAMMERS).column[String]("name")) { (ind, p) ⇒ s"[lang:$ind/person:$p]" }
+      .innerJoin(qProgByLang(_).streamC[Observable](TEST_DB, PROGRAMMERS).column[String]("name")) { (ind, p) ⇒ s"[lang:$ind/person:$p]" }
 
     val s = new Subscriber[String] {
       override def onStart(): Unit = request(1)
@@ -91,7 +90,7 @@ class ObservableSpec extends Specification {
         request(1)
       }
       override def onError(e: Throwable): Unit = {
-        logger.info("OnError: " + e.getMessage)
+        logger.info(s"OnError: ${e.getMessage}")
         c.countDown()
       }
       override def onCompleted(): Unit = {
@@ -100,11 +99,12 @@ class ObservableSpec extends Specification {
       }
     }
 
-    Task(query.subscribe(s)) runAsync (_ ⇒ ())
+    query.observeOn(ExecutionContextScheduler(ExecutionContext.fromExecutor(executor)))
+      .subscribe(s)
     c.await()
     10 === responses.get()
   }
-  /*
+
   "One to many join through mongoStream with raw objects" in new MongoStreamsEnviroment {
     initMongo
     val buffer = Buffer.empty[String]
@@ -136,13 +136,13 @@ class ObservableSpec extends Specification {
       }
     }
 
-    val query = qLang.stream2[Observable](DB_NAME, LANGS).joinRaw(qProg(_).stream2[Observable](DB_NAME, PROGRAMMERS)) { (l, r) ⇒
+    val query = qLang.streamC[Observable](TEST_DB, LANGS).innerJoinRaw(qProg(_).streamC[Observable](TEST_DB, PROGRAMMERS)) { (l, r) ⇒
       s"[lang:${l.get("name").asInstanceOf[String]}/person:${r.get("name").asInstanceOf[String]}]"
     }
 
-    Task(query.subscribe(s)) runAsync (_ ⇒ ())
+    query.observeOn(ExecutionContextScheduler(ExecutionContext.fromExecutor(executor)))
+      .subscribe(s)
     c.await()
-    logger.info(sb.toString())
     10 === responses.get()
-  }*/
+  }
 }

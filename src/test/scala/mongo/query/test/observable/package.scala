@@ -15,7 +15,7 @@
 package mongo.query.test
 
 import java.util.concurrent.ExecutorService
-import mongo.dsl3.Interaction.StreamerFactory
+import mongo.dsl3.Interaction.Streamer
 import mongo.dsl3.Query
 import org.apache.log4j.Logger
 import rx.lang.scala.schedulers.ExecutionContextScheduler
@@ -34,7 +34,7 @@ package object observable {
     override def bind[A, B](fa: Observable[A])(f: (A) ⇒ Observable[B]): Observable[B] = fa.flatMap(f)
   }
 
-  implicit object RxStreamer extends StreamerFactory[Observable] {
+  implicit object RxStreamer extends Streamer[Observable] {
     override def create[T](q: BasicDBObject, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): Observable[T] = {
       Observable { subscriber: Subscriber[T] ⇒
         subscriber.setProducer(new Producer() {
@@ -70,65 +70,57 @@ package object observable {
     type MStream[Out] = Observable[Out]
   }
 
-  trait Fetcher[T] extends Producer {
-    def db: String
-    def coll: String
-    def q: BasicDBObject
-    def c: MongoClient
-    def log: Logger
-    def subscriber: Subscriber[T]
-
-    def extract(c: DBCursor): T = {
-      val r = c.next().asInstanceOf[T]
-      log.info(s"fetch $r")
-      r
-    }
-
-    lazy val cursor: Option[DBCursor] = (Try {
-      Option(c.getDB(db).getCollection(coll).find(q))
-    } recover {
-      case e: Throwable ⇒
-        subscriber.onError(e)
-        None
-    }).get
-
-    @tailrec private def go(n: Long): Unit = {
-      if (n > 0) {
-        if (cursor.find(_.hasNext).isDefined) {
-          subscriber.onNext(extract(cursor.get))
-          go(n - 1)
-        } else subscriber.onCompleted
-      }
-    }
-
-    def fetch(n: Long): Unit = {
-      log.info(s"${##} request $n")
-      go(n)
-    }
-  }
-
-  trait PKFetcher[T] extends Fetcher[T] {
-    self: { def key: String } ⇒
-
-    abstract override def extract(c: DBCursor): T = {
-      super.extract(c).asInstanceOf[DBObject].get(key).asInstanceOf[T]
-    }
-  }
-
-  final class NestedProducer[T](val subscriber: Subscriber[T], val db: String, val coll: String,
-                                val q: BasicDBObject, val c: MongoClient, val log: Logger) extends Fetcher[T] {
-    override def request(n: Long) = fetch(n)
-  }
-
-  final class KeyProducer[T](val subscriber: Subscriber[T], val db: String, val coll: String,
-                             val q: BasicDBObject, val c: MongoClient, val log: Logger,
-                             val key: String) extends PKFetcher[T] {
-    override def request(n: Long) = fetch(n)
-  }
-
   object MongoObservableT {
     import scalaz.Free.runFC
     import Query._
+
+    trait Fetcher[T] {
+      def db: String
+      def coll: String
+      def q: BasicDBObject
+      def c: MongoClient
+      def log: Logger
+      def subscriber: Subscriber[T]
+
+      lazy val cursor: Option[DBCursor] = (Try {
+        Option(c.getDB(db).getCollection(coll).find(q))
+      } recover {
+        case e: Throwable ⇒
+          subscriber.onError(e)
+          None
+      }).get
+
+      @tailrec private def go(n: Long): Unit = {
+        log.info(s"${##} request $n")
+        if (n > 0) {
+          if (cursor.find(_.hasNext).isDefined) {
+            subscriber.onNext(extract(cursor.get))
+            go(n - 1)
+          } else subscriber.onCompleted
+        }
+      }
+
+      def extract(c: DBCursor): T = {
+        val r = c.next.asInstanceOf[T]
+        log.info(s"fetch $r")
+        r
+      }
+
+      def fetch(n: Long): Unit = go(n)
+    }
+
+    class QueryProducer[T](val subscriber: Subscriber[T], val db: String, val coll: String,
+                           val q: BasicDBObject, val c: MongoClient, val log: Logger) extends Producer {
+      self: { def fetch(n: Long) } ⇒
+      override def request(n: Long) = fetch(n)
+    }
+
+    trait PKFetcher[T] extends Fetcher[T] {
+      def key: String
+      abstract override def extract(c: DBCursor): T = {
+        super.extract(c).asInstanceOf[DBObject].get(key).asInstanceOf[T]
+      }
+    }
 
     implicit object joiner extends join.Joiner[MongoObservableT] {
       val init = new BasicDBObject
@@ -137,13 +129,13 @@ package object observable {
 
       private def resource[A](q: BasicDBObject, db: String, coll: String): Observable[A] = {
         Observable { subscriber: Subscriber[A] ⇒
-          subscriber.setProducer(new NestedProducer[A](subscriber, db, coll, q, client, log))
+          subscriber.setProducer(new QueryProducer[A](subscriber, db, coll, q, client, log) with Fetcher[A])
         }.subscribeOn(scheduler)
       }
 
-      private def keyResource[A](q: BasicDBObject, db: String, coll: String, key: String): Observable[A] = {
+      private def keyResource[A](q: BasicDBObject, db: String, coll: String, keyField: String): Observable[A] = {
         Observable { subscriber: Subscriber[A] ⇒
-          subscriber.setProducer(new KeyProducer[A](subscriber, db, coll, q, client, log, key))
+          subscriber.setProducer(new QueryProducer[A](subscriber, db, coll, q, client, log) with PKFetcher[A] { override val key = keyField })
         }.subscribeOn(scheduler)
       }
 
@@ -161,7 +153,11 @@ package object observable {
         }
 
       override def innerJoin[A, B, C](l: Observable[A])(relation: (A) ⇒ Observable[B])(f: (A, B) ⇒ C): MongoObservableT#MStream[C] =
-        l.flatMap { id ⇒ relation(id).map(f(id, _)) }
+        for {
+          id ← l
+          rs ← relation(id).map(f(id, _))
+        } yield rs
+      //l.flatMap { id ⇒ relation(id).map(f(id, _)) }
     }
   }
 
@@ -174,10 +170,10 @@ package object observable {
         }
       }
 
-    def leftJoin[E, C](f: T ⇒ Observable[E])(m: (T, E) ⇒ C): Observable[C] =
+    def innerJoin[E, C](f: T ⇒ Observable[E])(m: (T, E) ⇒ C): Observable[C] =
       self.flatMap { id ⇒ f(id).map(m(id, _)) }
 
-    def leftJoinRaw[E](f: T ⇒ Observable[T])(m: (T, T) ⇒ E): Observable[E] =
+    def innerJoinRaw[E](f: T ⇒ Observable[T])(m: (T, T) ⇒ E): Observable[E] =
       self.flatMap { id ⇒ f(id).map(m(id, _)) }
   }
 }

@@ -18,10 +18,10 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicLong
 
 import com.mongodb.DBObject
-import mongo.query.test.observable.MongoObservableT
 import org.specs2.mutable.Specification
 
 import scala.collection.mutable.Buffer
+import scala.concurrent.ExecutionContext
 import scalaz.concurrent.Task
 import scalaz.stream.{ io, Process }
 
@@ -42,7 +42,7 @@ class JoinerSpec extends Specification {
     def qProg(id: Int) = for { q ← "lang" $eq id } yield q
 
     implicit val c = client
-    val joiner = new Join[MongoStreamsT]
+    val joiner = Join[MongoStreamsT]
 
     //[Int, DBObject, String]
     val query = joiner.join(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
@@ -55,13 +55,14 @@ class JoinerSpec extends Specification {
     } yield ()
 
     p.run.run
-    logger.info(buffer)
-
     buffer.size === 10
   }
 
   "Build joiner with with MongoObservableT" in new MongoStreamsEnviroment {
     import rx.lang.scala.Subscriber
+    import mongo.query.test.observable.MongoObservableT
+    import rx.lang.scala.schedulers.ExecutionContextScheduler
+
     initMongo
 
     val count = new CountDownLatch(1)
@@ -73,12 +74,12 @@ class JoinerSpec extends Specification {
     def qProg(id: Int) = for { q ← "lang" $eq id } yield q
 
     implicit val c = client
-    val joiner = new Join[MongoObservableT]
+    val joiner = Join[MongoObservableT]
     val query = joiner.join(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
       s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
     }
 
-    val s = new Subscriber[String] {
+    val testSubs = new Subscriber[String] {
       override def onStart(): Unit = request(1)
       override def onNext(n: String): Unit = {
         logger.info(s"receive $n")
@@ -95,7 +96,9 @@ class JoinerSpec extends Specification {
       }
     }
 
-    Task(query.subscribe(s)) runAsync (_ ⇒ ())
+    query.observeOn(ExecutionContextScheduler(ExecutionContext.fromExecutor(executor)))
+      .subscribe(testSubs)
+
     count.await()
     responses.get === 10
   }
