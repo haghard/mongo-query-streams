@@ -7,7 +7,7 @@ Design goals:
   * Provide mongo query creation in type safe manner
   * Write resource safe code
   * Use compositionality, expressiveness of scalaz-streams as advantage in mongo querying
-  * Consider the result as scalaz streams.
+  * Consider the result as [ScalazStream](https://github.com/scalaz/scalaz-stream) or [RxScala].
 
 Getting Started
 ===================
@@ -137,7 +137,7 @@ Here's a basic example how to use processes for simple query:
 
 Big win there is that `products` value incapsulates a full interaction lifecycle for with mongo client (get db by name, get collection by name, submit query with preferences, fetch records from cursor, close the cursor). If exception occurs cursor will be closed.
 
-We do support join between 2 collections and 2 different streaming library RxScala and ScalazStreams through single type `mongo.join.Join` which can by parametrized with `MongoStreamsT` on `MongoObservableT`   
+We do support join between 2 collections and 2 different streaming library [RxScala](https://github.com/ReactiveX/RxScala.git) and [ScalazStream](https://github.com/scalaz/scalaz-stream) through single type `mongo.join.Join` which can by parametrized with `MongoStreamsT` on `MongoObservableT`   
 
 Here's a example of how you can do join between collections `LANGS` and `PROGRAMMERS` by `LANGS.index == PROGRAMMERS.lang` using `Scalaz Streams`
 
