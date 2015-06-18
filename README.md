@@ -151,7 +151,7 @@ Big win there is that `products` value incapsulates a full interaction lifecycle
 
 We do support join between 2 collections and 2 different streaming library [RxScala](https://github.com/ReactiveX/RxScala.git) and [ScalazStream](https://github.com/scalaz/scalaz-stream) through single type `mongo.join.Join` which can by parametrized with `ProcessS` and `ObservableS`   
 
-We have two methods for join collections: `joinByPk` and `join`. If you fine in output type from left stream only with key field you should use `joinByPk`. If you aren't, than use `join` for unlimited possibilities in output type.
+We have two methods for join collections: `joinByPk` and `join`. If you fine with output type from left stream only with key field you should use `joinByPk`. If you aren't, than use `join` for unlimited possibilities in output type.
      
 Here's a example of how you can do joinByPk between collections `LANGS` and `PROGRAMMERS` by `LANGS.index == PROGRAMMERS.lang` using `Scalaz Streams`
 
