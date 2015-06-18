@@ -35,7 +35,7 @@ class JoinerSpec extends Specification {
   import Query._
   import MongoIntegrationEnv._
 
-  "Build joiner with Process" in new MongoStreamsEnviroment {
+  "Build joinByPk with Process" in new MongoStreamsEnviroment {
     initMongo
 
     val buffer = Buffer.empty[String]
@@ -47,7 +47,7 @@ class JoinerSpec extends Specification {
     implicit val c = client
     val joiner = Join[ProcessS]
 
-    val query = joiner.join(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
+    val query = joiner.joinByPk(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
       s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
     }
 
@@ -60,7 +60,32 @@ class JoinerSpec extends Specification {
     buffer.size === 10
   }
 
-  "Build joiner with with Observable" in new MongoStreamsEnviroment {
+  "Build join with Process" in new MongoStreamsEnviroment {
+    initMongo
+
+    val buffer = Buffer.empty[String]
+    val Sink = io.fillBuffer(buffer)
+
+    val qLang = for { q ← "index" $gte 0 $lte 5 } yield q
+    def qProg(left: DBObject) = for { q ← "lang" $eq left.get("index").asInstanceOf[Int] } yield q
+
+    implicit val c = client
+    val joiner = Join[ProcessS]
+
+    val query = joiner.join(qLang, LANGS, qProg(_), PROGRAMMERS, TEST_DB) { (l, r) ⇒
+      s"Primary-key:${l.get("index")} - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
+    }
+
+    val p = for {
+      e ← Process.eval(Task.delay(client)) through query.out
+      _ ← e to Sink
+    } yield ()
+
+    p.run.run
+    buffer.size === 10
+  }
+
+  "Build joinByPk with Observable" in new MongoStreamsEnviroment {
     import rx.lang.scala.Subscriber
     import rx.lang.scala.schedulers.ExecutionContextScheduler
 
@@ -77,7 +102,52 @@ class JoinerSpec extends Specification {
     implicit val c = client
     val joiner = Join[ObservableS]
 
-    val query = joiner.join(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
+    val query = joiner.joinByPk(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
+      s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
+    }
+
+    val testSubs = new Subscriber[String] {
+      override def onStart(): Unit = request(1)
+      override def onNext(n: String): Unit = {
+        logger.info(s"receive $n")
+        responses.incrementAndGet()
+        request(1)
+      }
+      override def onError(e: Throwable): Unit = {
+        logger.info(s"OnError: ${e.getMessage}")
+        count.countDown()
+      }
+      override def onCompleted(): Unit = {
+        logger.info("Interaction has been completed")
+        count.countDown()
+      }
+    }
+
+    query.observeOn(ExecutionContextScheduler(ExecutionContext.fromExecutor(executor)))
+      .subscribe(testSubs)
+
+    count.await()
+    responses.get === 10
+  }
+
+  "Build join with Observable" in new MongoStreamsEnviroment {
+    import rx.lang.scala.Subscriber
+    import rx.lang.scala.schedulers.ExecutionContextScheduler
+
+    initMongo
+
+    val count = new CountDownLatch(1)
+    val responses = new AtomicLong(0)
+    val buffer = Buffer.empty[String]
+    val Sink = io.fillBuffer(buffer)
+
+    val qLang = for { q ← "index" $gte 0 $lte 5 } yield q
+    def qProg(left: DBObject) = for { q ← "lang" $eq left.get("index").asInstanceOf[Int] } yield q
+
+    implicit val c = client
+    val joiner = Join[ObservableS]
+
+    val query = joiner.join(qLang, LANGS, qProg(_), PROGRAMMERS, TEST_DB) { (l, r) ⇒
       s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
     }
 

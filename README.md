@@ -17,7 +17,7 @@ First, you will need to add the Bintray resolver settings to your SBT file:
 ```
 and
  ```scala
-   libraryDependencies += "org.mongo.scalaz"    %% "mongo-query-streams" %  "0.6.4"   
+   libraryDependencies += "org.mongo.scalaz"    %% "mongo-query-streams" %  "0.6.5"   
  ```
 
 Examples
@@ -151,7 +151,9 @@ Big win there is that `products` value incapsulates a full interaction lifecycle
 
 We do support join between 2 collections and 2 different streaming library [RxScala](https://github.com/ReactiveX/RxScala.git) and [ScalazStream](https://github.com/scalaz/scalaz-stream) through single type `mongo.join.Join` which can by parametrized with `MongoStreamsT` on `MongoObservableT`   
 
-Here's a example of how you can do join between collections `LANGS` and `PROGRAMMERS` by `LANGS.index == PROGRAMMERS.lang` using `Scalaz Streams`
+We have two methods for join collections: `joinByPk` and `join`. If you fine in output type from left stream only with key field you should use `joinByPk`. If you aren't, than use `join` for unlimited possibilities in output type.
+     
+Here's a example of how you can do joinByPk between collections `LANGS` and `PROGRAMMERS` by `LANGS.index == PROGRAMMERS.lang` using `Scalaz Streams`
 
 ```scala
   import mongo._
@@ -171,9 +173,9 @@ Here's a example of how you can do join between collections `LANGS` and `PROGRAM
   implicit val c = client
   val joiner = Join[ProcessS]
       
-  val query = joiner.join(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
+  val query = joiner.joinByPk(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
     s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
-  }
+  }              
           
   for {
     e ← Process.eval(Task.delay(client)) through query.out
@@ -207,7 +209,7 @@ Join using `rx.lang.scala.Observable`
   implicit val c = client
   val joiner = Join[ObservableS]
   
-  val query = joiner.join(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
+  val query = joiner.joinByPk(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
     s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
   }
   
@@ -240,4 +242,4 @@ Generated files can be found in /target/spec2-reports
 
 Status
 ------
-0.6.4 version
+0.6.5 version

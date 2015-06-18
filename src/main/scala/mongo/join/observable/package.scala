@@ -82,37 +82,71 @@ package object observable {
     }
 
     implicit object joiner extends Joiner[ObservableS] {
-      val init: ObservableS#DBRecord = new com.mongodb.BasicDBObject
-
-      private def createQuery(q: QueryFree[ObservableS#DBRecord]) =
-        (runFC[StatementOp, QueryS, ObservableS#DBRecord](q)(Query.QueryInterpreterS)).run(init)._1
+      type Record = ObservableS#DBRecord
 
       val scheduler = ExecutionContextScheduler(ExecutionContext.fromExecutor(exec))
 
-      private def resource[A](q: ObservableS#DBRecord, db: String, coll: String): Observable[A] = {
+      private def resource[A](q: Record, db: String, coll: String): Observable[A] = {
+        log.info(s"[$db - $coll] Query: $q")
         Observable { subscriber: Subscriber[A] ⇒
           subscriber.setProducer(new QueryProducer[A](subscriber, db, coll, q, client, log) with Fetcher[A])
         }.subscribeOn(scheduler)
       }
 
-      private def keyResource[A](q: ObservableS#DBRecord, db: String, coll: String, keyField: String): Observable[A] = {
+      private def typedResource[A](q: Record, db: String, coll: String, keyField: String): Observable[A] = {
+        log.info(s"[$db - $coll] Query: $q")
         Observable { subscriber: Subscriber[A] ⇒
-          subscriber.setProducer(new QueryProducer[A](subscriber, db, coll, q, client, log) with PKFetcher[A] { override val key = keyField })
+          subscriber.setProducer(new QueryProducer[A](subscriber, db, coll, q, client, log) with PKFetcher[A] {
+            override val key = keyField
+          })
         }.subscribeOn(scheduler)
       }
 
-      override def left[A](q: QueryFree[ObservableS#DBRecord], db: String, coll: String, key: String): ObservableS#DBStream[A] = {
-        val query = createQuery(q)
-        log.info(s"[$db - $coll] query: $query")
-        keyResource[A](query, db, coll, key)
-      }
+      /**
+       *
+       * @param q
+       * @param db
+       * @param coll
+       * @param key
+       * @tparam A
+       * @return
+       */
+      override def left[A](q: QueryFree[Record], db: String, coll: String, key: String): ObservableS#DBStream[A] =
+        typedResource[A](createQuery(q), db, coll, key)
 
-      override def relation[A, B](r: (A) ⇒ QueryFree[ObservableS#DBRecord], db: String, coll: String): (A) ⇒ ObservableS#DBStream[B] =
-        id ⇒ {
-          val query = createQuery(r(id))
-          log.info(s"[$db - $coll] query: $query")
-          resource[B](query, db, coll)
-        }
+      /**
+       *
+       * @param q
+       * @param db
+       * @param coll
+       * @return
+       */
+      override def leftR(q: QueryFree[Record], db: String, coll: String): Observable[ObservableS#DBRecord] =
+        resource[Record](createQuery(q), db, coll)
+
+      /**
+       *
+       * @param r
+       * @param db
+       * @param coll
+       * @tparam A
+       * @tparam B
+       * @return
+       */
+      override def relation[A, B](r: (A) ⇒ QueryFree[Record], db: String, coll: String): (A) ⇒ ObservableS#DBStream[B] =
+        id ⇒
+          resource[B](createQuery(r(id)), db, coll)
+
+      /**
+       *
+       * @param r
+       * @param db
+       * @param coll
+       * @return
+       */
+      override def relationR(r: (ObservableS#DBRecord) ⇒ QueryFree[ObservableS#DBRecord], db: String, coll: String): (ObservableS#DBRecord) ⇒ Observable[ObservableS#DBRecord] =
+        id ⇒
+          resource[ObservableS#DBRecord](createQuery(r(id)), db, coll)
 
       override def innerJoin[A, B, C](l: Observable[A])(relation: (A) ⇒ Observable[B])(f: (A, B) ⇒ C): ObservableS#DBStream[C] =
         for {
