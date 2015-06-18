@@ -185,7 +185,7 @@ Here's a example of how you can do join between collections `LANGS` and `PROGRAM
   
 ```
 
-Join using `rx.Observable`
+Join using `rx.lang.scala.Observable`
 
 ```scala
 
