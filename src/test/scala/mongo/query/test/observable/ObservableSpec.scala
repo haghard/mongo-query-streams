@@ -15,23 +15,65 @@
 package mongo.query.test.observable
 
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{ ExecutorService, CountDownLatch }
 
 import com.mongodb.BasicDBObject
+import mongo.dsl3.Interaction.Streamer
 import mongo.query.test.{ MongoIntegrationEnv, MongoStreamsEnviroment }
 import org.specs2.mutable.Specification
 import rx.lang.scala.schedulers.ExecutionContextScheduler
-import rx.lang.scala.{ Observable, Subscriber }
+import rx.lang.scala.{ Producer, Observable, Subscriber }
 
+import scala.annotation.tailrec
 import scala.collection.mutable.Buffer
 import scala.concurrent.ExecutionContext
+import scala.util.Try
 import scalaz.stream.io
 
 class ObservableSpec extends Specification {
   import mongo._
+  import mongo.join.observable._
   import dsl3._
   import Query._
   import MongoIntegrationEnv._
+
+  implicit val M = new scalaz.Monad[Observable]() {
+    override def point[A](a: ⇒ A): Observable[A] = Observable.just(a)
+    override def bind[A, B](fa: Observable[A])(f: (A) ⇒ Observable[B]): Observable[B] = fa.flatMap(f)
+  }
+
+  implicit object RxStreamer extends Streamer[Observable] {
+    import com.mongodb._
+    override def create[T](q: BasicDBObject, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): Observable[T] = {
+      Observable { subscriber: Subscriber[T] ⇒
+        subscriber.setProducer(new Producer() {
+          lazy val cursor: Option[DBCursor] = (Try {
+            Option(client.getDB(db).getCollection(coll).find(q))
+          } recover {
+            case e: Throwable ⇒
+              subscriber.onError(e)
+              None
+          }).get
+
+          @tailrec def go(n: Long): Unit = {
+            if (n > 0) {
+              if (cursor.find(_.hasNext).isDefined) {
+                val r = cursor.get.next().asInstanceOf[T]
+                logger.info(s"fetch $r")
+                subscriber.onNext(r)
+                go(n - 1)
+              } else subscriber.onCompleted
+            }
+          }
+
+          override def request(n: Long): Unit = {
+            logger.info(s"${##} request $n")
+            go(n)
+          }
+        })
+      }.subscribeOn(ExecutionContextScheduler(ExecutionContext.fromExecutor(pool)))
+    }
+  }
 
   "Build query and perform streaming using Observable" in new MongoStreamsEnviroment {
     initMongo

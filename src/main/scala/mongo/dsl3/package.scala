@@ -55,7 +55,7 @@ package object dsl3 { outer ⇒
     sealed trait StatementOp[T]
     case class EqQ(q: BasicDBObject) extends StatementOp[BasicDBObject]
     case class ChainQ(q: BasicDBObject) extends StatementOp[BasicDBObject]
-    type QueryBuilder[A] = scalaz.Free.FreeC[StatementOp, A]
+    type QueryFree[A] = scalaz.Free.FreeC[StatementOp, A]
 
     type QueryApp[T] = StatementOp[T] :+: Log[T] :+: CNil
     type CoyoApp[T] = Coyoneda[QueryApp, T]
@@ -67,8 +67,8 @@ package object dsl3 { outer ⇒
 
     val init = new BasicDBObject
 
-    implicit def f2FreeM(q: mongo.EqQueryFragment): QueryBuilder[BasicDBObject] = scalaz.Free.liftFC(EqQ(q.q))
-    implicit def c2FreeM(q: mongo.ComposableQueryFragment): QueryBuilder[BasicDBObject] = scalaz.Free.liftFC(ChainQ(q.q))
+    implicit def f2FreeM(q: mongo.EqQueryFragment): QueryFree[BasicDBObject] = scalaz.Free.liftFC(EqQ(q.q))
+    implicit def c2FreeM(q: mongo.ComposableQueryFragment): QueryFree[BasicDBObject] = scalaz.Free.liftFC(ChainQ(q.q))
 
     type QueryS[T] = scalaz.State[BasicDBObject, T]
     object QueryInterpreterS extends (Query.StatementOp ~> QueryS) {
@@ -84,7 +84,7 @@ package object dsl3 { outer ⇒
       }
     }
 
-    def query(rq: QueryBuilder[BasicDBObject]): FreeApp[BasicDBObject] =
+    def query(rq: QueryFree[BasicDBObject]): FreeApp[BasicDBObject] =
       for {
         _ ← LogQuery.debug(s"Incoming query")
         q = (scalaz.Free.runFC[StatementOp, QueryS, BasicDBObject](rq)(QueryInterpreterS))
@@ -128,14 +128,14 @@ package object dsl3 { outer ⇒
     def readBatch(client: MongoClient, q: BasicDBObject, db: String, coll: String): FreeApp[NonEmptyResult] =
       lift(ReadBatch(client, q, db, coll))
 
-    def createQuery(rq: Query.QueryBuilder[BasicDBObject]): FreeApp[BasicDBObject] =
+    def createQuery(rq: Query.QueryFree[BasicDBObject]): FreeApp[BasicDBObject] =
       lift(Query.query(rq))
 
     object LogInteraction {
       def debug(msg: String) = Copoyo[InteractionApp](LogMsg(DebugLevel, msg))
     }
 
-    def program(rq: Query.QueryBuilder[BasicDBObject], client: MongoClient,
+    def program(rq: Query.QueryFree[BasicDBObject], client: MongoClient,
                 db: String, coll: String, mode: FetchMode.Type): FreeApp[NonEmptyResult] =
       for {
         q ← createQuery(rq)
@@ -232,7 +232,7 @@ package object dsl3 { outer ⇒
     }
   }
 
-  implicit class ProgramSyntax(val self: Query.QueryBuilder[BasicDBObject]) extends AnyVal {
+  implicit class ProgramSyntax(val self: Query.QueryFree[BasicDBObject]) extends AnyVal {
     import outer.Interaction._
     import scalaz.Monad
 

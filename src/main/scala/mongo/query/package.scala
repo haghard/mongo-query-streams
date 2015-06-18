@@ -28,7 +28,6 @@ package object query {
   import scalaz.stream.process1._
 
   type MongoChannel[T, A] = Channel[Task, T, Process[Task, A]]
-  type MChannel[A] = MongoChannel[MongoClient, A]
 
   case class QuerySetting(q: DBObject, db: String, collName: String, sortQuery: Option[DBObject],
                           limit: Option[Int], skip: Option[Int], maxTimeMS: Option[Long])

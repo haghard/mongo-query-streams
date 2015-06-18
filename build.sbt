@@ -6,7 +6,7 @@ organization := "org.mongo.scalaz"
 
 name := "mongo-query-streams"
 
-version := "0.6.3-snapshot"
+version := "0.6.3"
 
 scalaVersion := "2.11.6"
 
@@ -33,6 +33,7 @@ scalacOptions ++= Seq(
 
 val MongoDriverVersion = "2.13.0"
 val ScalazStreamVersion = "0.7.1a"
+val RxScala = "0.25.0"
 val localMvnRepo = "/Volumes/Data/dev_build_tools/apache-maven-3.1.1/repository"
 
 scalariformSettings
@@ -53,14 +54,14 @@ resolvers ++= Seq(
 libraryDependencies ++= Seq(
     "org.mongodb"       %   "mongo-java-driver" %   MongoDriverVersion  withSources(),
     "org.scalaz.stream" %%  "scalaz-stream"     %   ScalazStreamVersion withSources(),
+    "io.reactivex"      %%  "rxscala"           %   RxScala             withSources(),
     "oncue.ermine"      %%  "ermine-parser"     %   "0.2.1-2",
     "com.chuusai"       %%  "shapeless"         %   "2.2.1",
     "log4j"             %   "log4j"             %   "1.2.14")
 
 libraryDependencies ++= Seq(
   "de.bwaldvogel"   %   "mongo-java-server"   %   "1.1.3" %   "test" withSources(),
-  "org.specs2"      %%  "specs2-core"         %   "3.2"   %   "test" withSources(),
-  "io.reactivex"    %%  "rxscala"             %   "0.25.0"%   "test"
+  "org.specs2"      %%  "specs2-core"         %   "3.2"   %   "test" withSources()
 )
 
 scalacOptions ++= Seq(
@@ -86,7 +87,7 @@ licenses += ("Apache-2.0", url("http://www.apache.org/licenses/"))
 
 bintrayOrganization in bintray := Some("haghard")
 
-repository in bintray := "snapshots" //"releases"
+repository in bintray := "releases" //"snapshots"
 
 publishMavenStyle := true
 //publishTo := Some(Resolver.file("file",  new File(localMvnRepo)))

@@ -155,10 +155,11 @@ Here's a example of how you can do join between collections `LANGS` and `PROGRAM
 
 ```scala
   import mongo._
-  import join._
+  import join._    
   import dsl3._
   import Query._
-  import scalaz.stream.Process  
+  import scalaz.stream.Process
+  import mongo.join.process.ProcessS
   
   val buffer = Buffer.empty[String]
   val Sink = scalaz.stream.io.fillBuffer(buffer)
@@ -168,7 +169,7 @@ Here's a example of how you can do join between collections `LANGS` and `PROGRAM
   
   implicit val exec = newFixedThreadPool(2, new NamedThreadFactory("db-worker"))
   implicit val c = client
-  val joiner = Join[MongoStreamsT]
+  val joiner = Join[ProcessS]
       
   val query = joiner.join(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
     s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
@@ -192,9 +193,9 @@ Join using `rx.Observable`
   import join._
   import dsl3._
   import Query._
-  import rx.lang.scala.Subscriber
-  import mongo.query.test.observable.MongoObservableT
+  import rx.lang.scala.Subscriber  
   import rx.lang.scala.schedulers.ExecutionContextScheduler
+  import mongo.join.observable.ObservableS
   
   val buffer = Buffer.empty[String]
   val Sink = io.fillBuffer(buffer)
@@ -204,7 +205,7 @@ Join using `rx.Observable`
   
   implicit val exec = newFixedThreadPool(2, new NamedThreadFactory("db-worker"))
   implicit val c = client
-  val joiner = Join[MongoObservableT]
+  val joiner = Join[ObservableS]
   
   val query = joiner.join(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
     s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
@@ -239,4 +240,4 @@ Generated files can be found in /target/spec2-reports
 
 Status
 ------
-0.6.2 version
+0.6.3 version

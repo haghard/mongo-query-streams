@@ -25,6 +25,9 @@ import scala.concurrent.ExecutionContext
 import scalaz.concurrent.Task
 import scalaz.stream.{ io, Process }
 
+import mongo.join.process.ProcessS
+import mongo.join.observable.ObservableS
+
 class JoinerSpec extends Specification {
   import mongo._
   import join._
@@ -32,7 +35,7 @@ class JoinerSpec extends Specification {
   import Query._
   import MongoIntegrationEnv._
 
-  "Build joiner with MongoStreamsT" in new MongoStreamsEnviroment {
+  "Build joiner with Process" in new MongoStreamsEnviroment {
     initMongo
 
     val buffer = Buffer.empty[String]
@@ -42,7 +45,7 @@ class JoinerSpec extends Specification {
     def qProg(id: Int) = for { q ← "lang" $eq id } yield q
 
     implicit val c = client
-    val joiner = Join[MongoStreamsT]
+    val joiner = Join[ProcessS]
 
     val query = joiner.join(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
       s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
@@ -57,9 +60,8 @@ class JoinerSpec extends Specification {
     buffer.size === 10
   }
 
-  "Build joiner with with MongoObservableT" in new MongoStreamsEnviroment {
+  "Build joiner with with Observable" in new MongoStreamsEnviroment {
     import rx.lang.scala.Subscriber
-    import mongo.query.test.observable.MongoObservableT
     import rx.lang.scala.schedulers.ExecutionContextScheduler
 
     initMongo
@@ -73,7 +75,7 @@ class JoinerSpec extends Specification {
     def qProg(id: Int) = for { q ← "lang" $eq id } yield q
 
     implicit val c = client
-    val joiner = Join[MongoObservableT]
+    val joiner = Join[ObservableS]
 
     val query = joiner.join(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
       s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
