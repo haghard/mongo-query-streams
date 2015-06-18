@@ -63,13 +63,11 @@ package object process {
           DBChannel[ProcessS#Client, B](P.eval(Task.now { client: ProcessS#Client ⇒ Task(resource(query, client, db, coll)) }))
         }
 
-      //l.flatMap { id ⇒ relation(id) |> lift(f(id, _)) }
-      override def innerJoin[A, B, C](l: ProcessS#DBStream[A])(relation: A ⇒ ProcessS#DBStream[B])(f: (A, B) ⇒ C): ProcessS#DBStream[C] = {
+      override def innerJoin[A, B, C](l: ProcessS#DBStream[A])(relation: A ⇒ ProcessS#DBStream[B])(f: (A, B) ⇒ C): ProcessS#DBStream[C] =
         for {
           id ← l
           rs ← relation(id) |> lift(f(id, _))
         } yield rs
-      }
     }
   }
 }

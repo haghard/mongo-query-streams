@@ -102,19 +102,18 @@ package object observable {
       }
 
       override def left[A](q: QueryFree[ObservableS#DBRecord], db: String, coll: String, key: String): ObservableS#DBStream[A] = {
-        val q0 = createQuery(q)
-        log.info(s"[$db - $coll] query: $q0")
-        keyResource[A](q0, db, coll, key)
+        val query = createQuery(q)
+        log.info(s"[$db - $coll] query: $query")
+        keyResource[A](query, db, coll, key)
       }
 
       override def relation[A, B](r: (A) ⇒ QueryFree[ObservableS#DBRecord], db: String, coll: String): (A) ⇒ ObservableS#DBStream[B] =
         id ⇒ {
-          val q0 = createQuery(r(id))
-          log.info(s"[$db - $coll] query: $q0")
-          resource[B](q0, db, coll)
+          val query = createQuery(r(id))
+          log.info(s"[$db - $coll] query: $query")
+          resource[B](query, db, coll)
         }
 
-      //l.flatMap { id ⇒ relation(id).map(f(id, _)) }
       override def innerJoin[A, B, C](l: Observable[A])(relation: (A) ⇒ Observable[B])(f: (A, B) ⇒ C): ObservableS#DBStream[C] =
         for {
           id ← l

@@ -240,4 +240,4 @@ Generated files can be found in /target/spec2-reports
 
 Status
 ------
-0.6.3 version
+0.6.4 version
