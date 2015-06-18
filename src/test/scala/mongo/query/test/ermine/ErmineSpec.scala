@@ -12,15 +12,15 @@
  * limitations under the License.
  */
 
-package mongo.query.test
+package mongo.query.test.ermine
 
-import mongo.mqlparser.QueryParser._
-
-import scalaz.{ -\/, \/- }
 import mongo.mqlparser._
+import mongo.query.test.ermine.Ermine._
 import org.specs2.mutable.Specification
 
-class ErmineParserSpec extends Specification {
+import scalaz.{ -\/, \/- }
+
+class ErmineSpec extends Specification {
 
   val logger = org.apache.log4j.Logger.getLogger("ermine-parser")
 

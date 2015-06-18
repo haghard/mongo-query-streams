@@ -55,13 +55,13 @@ libraryDependencies ++= Seq(
     "org.mongodb"       %   "mongo-java-driver" %   MongoDriverVersion  withSources(),
     "org.scalaz.stream" %%  "scalaz-stream"     %   ScalazStreamVersion withSources(),
     "io.reactivex"      %%  "rxscala"           %   RxScala             withSources(),
-    "oncue.ermine"      %%  "ermine-parser"     %   "0.2.1-2",
     "com.chuusai"       %%  "shapeless"         %   "2.2.1",
     "log4j"             %   "log4j"             %   "1.2.14")
 
 libraryDependencies ++= Seq(
   "de.bwaldvogel"   %   "mongo-java-server"   %   "1.1.3" %   "test" withSources(),
-  "org.specs2"      %%  "specs2-core"         %   "3.2"   %   "test" withSources()
+  "org.specs2"      %%  "specs2-core"         %   "3.2"   %   "test" withSources(),
+  "oncue.ermine"      %%  "ermine-parser"     %   "0.2.1-2" %  "test" withSources()
 )
 
 scalacOptions ++= Seq(

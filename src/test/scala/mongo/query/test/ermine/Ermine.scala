@@ -12,16 +12,19 @@
  * limitations under the License.
  */
 
-package mongo.mqlparser
+package mongo.query.test.ermine
+
+import mongo.mqlparser.{ MqlDouble, MqlString, MqlValue }
 
 import scalaz._
 import scalaz.std.list._
 import scalaz.std.option._
 import scalaz.syntax.traverse._
 
-object QueryParser {
+object Ermine {
   val P = new scalaparsers.Parsing[Unit] {}
   import P._
+
   import scalaparsers.Diagnostic._
 
   case class Pair(name: String, v: MqlValue)
@@ -115,9 +118,7 @@ object QueryParser {
 
   private def addDigit(a: BigInt, c: Char) = a * 10 + (c - 48)
 
-  import scalaparsers.ParseState
-  import scalaparsers.Supply
-  import scalaparsers.Pos
+  import scalaparsers.{ ParseState, Pos, Supply }
 
   def runParser[A](p: Parser[A], input: String, fileName: String = "") =
     p.run(ParseState(
