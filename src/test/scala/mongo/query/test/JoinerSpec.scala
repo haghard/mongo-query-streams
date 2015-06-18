@@ -148,7 +148,7 @@ class JoinerSpec extends Specification {
     val joiner = Join[ObservableS]
 
     val query = joiner.join(qLang, LANGS, qProg(_), PROGRAMMERS, TEST_DB) { (l, r) ⇒
-      s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
+      s"Primary-key:${l.get("index")} - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
     }
 
     val testSubs = new Subscriber[String] {
