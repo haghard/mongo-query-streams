@@ -26,10 +26,9 @@ import rx.lang.scala.Producer
 
 package object observable {
   import Query._
-  import scalaz.Free.runFC
 
   trait ObservableS extends DBTypes {
-    type DBStream[Out] = Observable[Out]
+    override type DBStream[Out] = Observable[Out]
   }
 
   object ObservableS {
@@ -82,6 +81,7 @@ package object observable {
     }
 
     implicit object joiner extends Joiner[ObservableS] {
+      //for short
       type Record = ObservableS#DBRecord
 
       val scheduler = ExecutionContextScheduler(ExecutionContext.fromExecutor(exec))
@@ -111,7 +111,7 @@ package object observable {
        * @tparam A
        * @return
        */
-      override def left[A](q: QueryFree[Record], db: String, coll: String, key: String): ObservableS#DBStream[A] =
+      override def leftField[A](q: QueryFree[Record], db: String, coll: String, key: String): ObservableS#DBStream[A] =
         typedResource[A](createQuery(q), db, coll, key)
 
       /**
@@ -121,7 +121,7 @@ package object observable {
        * @param coll
        * @return
        */
-      override def leftR(q: QueryFree[Record], db: String, coll: String): Observable[ObservableS#DBRecord] =
+      override def left(q: QueryFree[Record], db: String, coll: String): Observable[ObservableS#DBRecord] =
         resource[Record](createQuery(q), db, coll)
 
       /**
@@ -133,7 +133,7 @@ package object observable {
        * @tparam B
        * @return
        */
-      override def relation[A, B](r: (A) ⇒ QueryFree[Record], db: String, coll: String): (A) ⇒ ObservableS#DBStream[B] =
+      override def relationField[A, B](r: (A) ⇒ QueryFree[Record], db: String, coll: String): (A) ⇒ ObservableS#DBStream[B] =
         id ⇒
           resource[B](createQuery(r(id)), db, coll)
 
@@ -144,9 +144,9 @@ package object observable {
        * @param coll
        * @return
        */
-      override def relationR(r: (ObservableS#DBRecord) ⇒ QueryFree[ObservableS#DBRecord], db: String, coll: String): (ObservableS#DBRecord) ⇒ Observable[ObservableS#DBRecord] =
+      override def relation(r: (Record) ⇒ QueryFree[Record], db: String, coll: String): (Record) ⇒ Observable[Record] =
         id ⇒
-          resource[ObservableS#DBRecord](createQuery(r(id)), db, coll)
+          resource[Record](createQuery(r(id)), db, coll)
 
       override def innerJoin[A, B, C](l: Observable[A])(relation: (A) ⇒ Observable[B])(f: (A, B) ⇒ C): ObservableS#DBStream[C] =
         for {

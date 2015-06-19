@@ -15,21 +15,17 @@
 package mongo.join
 
 package object process {
-  import mongo.dsl3._
   import mongo.query.DBChannel
-  import mongo.dsl3.QueryS
   import mongo.dsl3.Query.QueryFree
 
   trait ProcessS extends DBTypes {
-    type DBStream[Out] = DBChannel[Client, Out]
+    override type DBStream[Out] = DBChannel[Client, Out]
   }
 
   object ProcessS {
-    import scalaz.Free.runFC
     import scalaz.concurrent.Task
-    import scalaz.stream.{ Cause, io, Process }
-    import Query.StatementOp
     import scalaz.stream.process1.lift
+    import scalaz.stream.{ Cause, io, Process }
     val P = scalaz.stream.Process
 
     implicit object joiner extends Joiner[ProcessS] {
@@ -49,23 +45,23 @@ package object process {
         }
       }
 
-      override def left[A](q: QueryFree[Record], db: String, coll: String, keyColl: String): ProcessS#DBStream[A] =
+      override def leftField[A](q: QueryFree[Record], db: String, coll: String, keyColl: String): ProcessS#DBStream[A] =
         DBChannel[ProcessS#Client, A](P.eval(Task.now { client: ProcessS#Client ⇒
           Task(resource(createQuery(q), client, db, coll))
         })).column[A](keyColl)
 
-      override def leftR(q: QueryFree[Record], db: String, coll: String): DBChannel[ProcessS#Client, ProcessS#DBRecord] =
+      override def left(q: QueryFree[Record], db: String, coll: String): DBChannel[ProcessS#Client, ProcessS#DBRecord] =
         DBChannel[ProcessS#Client, Record](P.eval(Task.now { client: ProcessS#Client ⇒
           Task(resource(createQuery(q), client, db, coll))
         }))
 
-      override def relation[A, B](r: A ⇒ QueryFree[Record], db: String, coll: String): A ⇒ ProcessS#DBStream[B] =
+      override def relationField[A, B](r: A ⇒ QueryFree[Record], db: String, coll: String): A ⇒ ProcessS#DBStream[B] =
         id ⇒
           DBChannel[ProcessS#Client, B](P.eval(Task.now { client: ProcessS#Client ⇒
             Task(resource(createQuery(r(id)), client, db, coll))
           }))
 
-      override def relationR(r: (Record) ⇒ QueryFree[Record], db: String, coll: String): (ProcessS#DBRecord) ⇒ DBChannel[ProcessS#Client, ProcessS#DBRecord] =
+      override def relation(r: (Record) ⇒ QueryFree[Record], db: String, coll: String): (ProcessS#DBRecord) ⇒ DBChannel[ProcessS#Client, ProcessS#DBRecord] =
         topRecord ⇒
           DBChannel[ProcessS#Client, Record](P.eval(Task.now { client: ProcessS#Client ⇒
             Task(resource(createQuery(r(topRecord)), client, db, coll))

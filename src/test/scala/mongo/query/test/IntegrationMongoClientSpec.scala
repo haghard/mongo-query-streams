@@ -19,11 +19,12 @@ import dsl._
 import java.util.Date
 import mongo.query.create
 import scala.collection.mutable.ArrayBuffer
+import scalaz.\/
 import scalaz.concurrent.Task
 import org.apache.log4j.Logger
 import scalaz.stream.Process._
 import java.util.concurrent.atomic.AtomicBoolean
-import MongoIntegrationEnv.{ executor, ids, sinkWithBuffer, mock, /*asArticleId, asArticleIdsStr,*/ TEST_DB, PRODUCT }
+import MongoIntegrationEnv.{ executor, ids, sinkWithBuffer, mock, TEST_DB, PRODUCT, CATEGORY }
 import org.specs2.mutable._
 
 trait TestEnviroment[T] extends org.specs2.mutable.After {
@@ -35,7 +36,9 @@ trait TestEnviroment[T] extends org.specs2.mutable.After {
 
   lazy val server = mock()
 
-  def EnvLogger(): scalaz.stream.Sink[Task, String] = MongoIntegrationEnv.LoggerSink(logger)
+  def EnvLogger() = MongoIntegrationEnv.LoggerSink(logger)
+
+  def EnvLoggerEither() = MongoIntegrationEnv.LoggerSinkEither(logger)
 
   /**
    * Start mock mongo and return Process
@@ -61,13 +64,11 @@ class IntegrationMongoClientSpec extends Specification {
       b.collection(PRODUCT)
     }.column[Int]("article")
 
-    val p = for {
+    (for {
       dbObject ← Resource through q.out
       _ ← dbObject to sink
-    } yield ()
-
-    //It will be run even it prev process get hail
-    p.onFailure { th ⇒ isFailureInvoked.set(true); halt }
+    } yield ())
+      .onFailure { th ⇒ isFailureInvoked.set(true); halt }
       .onComplete { eval(Task.delay(isFailureComplete.set(true))) }
       .runLog.run
 
@@ -80,12 +81,11 @@ class IntegrationMongoClientSpec extends Specification {
       b.db(TEST_DB)
     }.column[Int]("article")
 
-    val p = for {
+    (for {
       dbObject ← Resource through q.out
       _ ← dbObject to sink
-    } yield ()
-
-    p.onFailure { th ⇒ isFailureInvoked.set(true); logger.debug(th.getMessage); halt }
+    } yield ())
+      .onFailure { th ⇒ isFailureInvoked.set(true); logger.debug(th.getMessage); halt }
       .onComplete(eval(Task.delay(isFailureComplete.set(true))))
       .runLog.run
 
@@ -100,12 +100,11 @@ class IntegrationMongoClientSpec extends Specification {
       b.db(TEST_DB)
     }.column[Int]("article")
 
-    val p = for {
+    (for {
       dbObject ← Resource through q.out
       _ ← dbObject to sink
-    } yield ()
-
-    p.onFailure { th ⇒ isFailureInvoked.set(true); logger.debug(th.getMessage); halt }
+    } yield ())
+      .onFailure { th ⇒ isFailureInvoked.set(true); logger.debug(th.getMessage); halt }
       .onComplete(eval(Task.delay(isFailureComplete.set(true))))
       .runLog.run
 
@@ -118,12 +117,11 @@ class IntegrationMongoClientSpec extends Specification {
       b.collection(PRODUCT)
     }.column[Int]("article")
 
-    val p = for {
+    (for {
       dbObject ← Resource through q.out
       _ ← dbObject to sink
-    } yield ()
-
-    p.onFailure { th ⇒ isFailureInvoked.set(true); logger.debug(th.getMessage); halt }
+    } yield ())
+      .onFailure { th ⇒ isFailureInvoked.set(true); logger.debug(th.getMessage); halt }
       .onComplete(eval(Task.delay(isFailureComplete.set(true))))
       .runLog.run
 
@@ -138,13 +136,11 @@ class IntegrationMongoClientSpec extends Specification {
     }.column[Int]("article")
 
     for (i ← 1 to 3) yield {
-      val p = for {
+      (for {
         dbObject ← Resource through products.out
         _ ← dbObject to sink
-      } yield ()
-
-      //It will be run even it prev process get hail
-      p.onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
+      } yield ())
+        .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
         .onComplete { eval(Task.delay(logger.debug(s"Interaction $i has been completed"))) }
         .runLog.run
     }
@@ -164,13 +160,11 @@ class IntegrationMongoClientSpec extends Specification {
       b.db(TEST_DB)
     }.column[Int]("article").map(_.toString)
 
-    val p = for {
+    (for {
       dbObject ← Resource through products.out
       _ ← dbObject observe EnvLogger to sink
-    } yield ()
-
-    //It will be run even it prev process get hail
-    p.onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
+    } yield ())
+      .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
       .onComplete { eval(Task.delay(logger.debug(s"Interaction has been completed"))) }
       .runLog.run
 
@@ -189,16 +183,40 @@ class IntegrationMongoClientSpec extends Specification {
       b.db(TEST_DB)
     }.column[Int]("article").map(_.toString)
 
-    val p = for {
+    (for {
       dbObject ← Resource through products.out
       _ ← dbObject observe EnvLogger to sink
-    } yield ()
-
-    //It will be run even it prev process get hail
-    p.onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
+    } yield ())
+      .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
       .onComplete { eval(Task.delay(logger.debug(s"Interaction has been completed"))) }
       .runLog.run
 
     buffer must be equalTo ArrayBuffer("1", "2")
+  }
+
+  "Interleave query streams nondeterminstically" in new TestEnviroment[String \/ Int] {
+
+    val products = create { b ⇒
+      b.q("article" $in Seq(1, 2, 3))
+      b.collection(PRODUCT)
+      b.db(TEST_DB)
+    }.column[Int]("article").map(_.toString)
+
+    val categories = create { b ⇒
+      b.q("category" $in Seq(12, 13))
+      b.collection(CATEGORY)
+      b.db(TEST_DB)
+    }.column[Int]("category")
+
+    (for {
+      cats ← Resource through categories.out
+      prodOrCat ← Resource through ((products either cats).out)
+      _ ← prodOrCat observe EnvLoggerEither to sink
+    } yield ())
+      .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
+      .onComplete { eval(Task.delay(logger.debug(s"Interaction has been completed"))) }
+      .runLog.run
+
+    buffer.size === 5
   }
 }

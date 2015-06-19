@@ -38,10 +38,10 @@ package object query {
 
   case class DBChannel[T, A](val out: MongoChannel[T, A]) {
 
-    private def compose[B](f: Process[Task, A] ⇒ Process[Task, B]): DBChannel[T, B] =
-      DBChannel(out.map(r ⇒ r andThen (pt ⇒ pt.map(p ⇒ f(p)))))
+    private def liftP[B](f: Process[Task, A] ⇒ Process[Task, B]): DBChannel[T, B] =
+      DBChannel(out.map(step ⇒ step.andThen(task ⇒ task.map(p ⇒ f(p)))))
 
-    private def pipe[B](p2: Process1[A, B]): DBChannel[T, B] = compose(_.pipe(p2))
+    private def pipe[B](p2: Process1[A, B]): DBChannel[T, B] = liftP(_.pipe(p2))
 
     def |>[B](p2: Process1[A, B]): DBChannel[T, B] = pipe(p2)
 
@@ -51,7 +51,7 @@ package object query {
      * @tparam B
      * @return
      */
-    def map[B](f: A ⇒ B): DBChannel[T, B] = compose(_.map(f))
+    def map[B](f: A ⇒ B): DBChannel[T, B] = liftP(_.map(f))
 
     /**
      *
@@ -70,7 +70,7 @@ package object query {
     }
 
     /**
-     * Interleave or combine the outputs of two processes.
+     * Interleave outputs of two processes in deterministic fashion.
      * If at any point the awaits on a side that has halted, we gracefully kill off the other side.
      * If at any point one terminates with cause `c`, both sides are killed, and
      * the resulting `Process` terminates with `c`.
@@ -102,6 +102,29 @@ package object query {
     }
 
     /**
+     *
+     * @param other
+     * @param t
+     * @tparam B
+     * @tparam C
+     * @return
+     */
+    def tee[B, C](other: Process[Task, B])(t: Tee[A, B, C]): DBChannel[T, C] =
+      liftP { p ⇒ p.tee(other)(t) }
+
+    /**
+     *
+     *
+     * Interleave or combine the outputs of two processes in nondeterministic fashion.
+     * It's useful when you want mix results from 2 query stream
+     * @param other
+     * @tparam B
+     * @return
+     */
+    def either[B](other: Process[Task, B]): DBChannel[T, A \/ B] =
+      liftP { p ⇒ p.wye(other)(scalaz.stream.wye.either) }
+
+    /**
      * Interleave or combine the outputs of two processes.
      * If at any point the awaits on a side that has halted, we gracefully kill off the other side.
      * If at any point one terminates with cause `c`, both sides are killed, and
@@ -113,6 +136,15 @@ package object query {
      * @return DBChannel[T, (A, B)]
      */
     def zip[B](stream: DBChannel[T, B]): DBChannel[T, (A, B)] = zipWith(stream)((_, _))
+
+    /**
+     * Interleave or combine the outputs of two processes in deterministic fashion. It's useful when you want to fetch object
+     * and transform each one with result from `other` process, or restrict result size with size of `other` stream
+     * @param other
+     * @tparam B
+     * @return
+     */
+    def zip[B](other: Process[Task, B]): DBChannel[T, (A, B)] = liftP { p ⇒ (p zip other) }
 
     /**
      * One to many relation powered by `flatMap` with restricted field in output
