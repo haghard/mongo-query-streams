@@ -173,10 +173,10 @@ package object dsl3 { outer ⇒
     }
 
     object BatchTrans extends (MongoInteractionOp ~> Id) {
-      @tailrec def go[A](cursor: DBCursor, list: List[A]): List[A] =
+      @tailrec def go[A](cursor: DBCursor, list: Vector[A]): Vector[A] =
         if (cursor.hasNext) {
           val r = cursor.next.asInstanceOf[A]
-          go(cursor, r :: list)
+          go(cursor, list.:+(r))
         } else list
 
       override def apply[A](fa: MongoInteractionOp[A]): Id[A] = fa match {
@@ -184,13 +184,13 @@ package object dsl3 { outer ⇒
           val r = client.getDB(db).getCollection(coll).findOne(qs.q)
           if (r == null) -\/(NotFound) else \/-(r)
         case f @ ReadBatch(client, qs, db, coll) ⇒ {
-          val c = client.getDB(db).getCollection(coll)
-          val cursor = c.find(qs.q)
+          val collection = client.getDB(db).getCollection(coll)
+          val cursor = collection.find(qs.q)
           qs.sort.foreach(cursor.sort(_))
           qs.limit.foreach(cursor.limit(_))
           qs.skip.foreach(cursor.skip(_))
           try {
-            \/-(new BasicDBObject(BatchPrefix, seqAsJavaList(go(cursor, Nil))))
+            \/-(new BasicDBObject(BatchPrefix, seqAsJavaList(go(cursor, Vector.empty))))
           } catch {
             case e: Exception ⇒ -\/(ReadError(e.getMessage))
           } finally {

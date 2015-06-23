@@ -68,7 +68,7 @@ class IntegrationMongoStreamsSpec extends Specification {
 
     val p = for {
       _ ← "index" $gte 0 $lte 5
-      _ ← ("index" -> Order.Ascending)
+      _ ← ("index" -> Order.Descending)
       q ← limit(4)
     } yield q
 
