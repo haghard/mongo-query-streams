@@ -57,6 +57,15 @@ package object mongo {
     def q: BasicDBObject
   }
 
+  sealed private[mongo] trait SortedQuery {
+    def sort: Option[DBObject]
+  }
+
+  object Order extends Enumeration {
+    val Ascending = Value(1)
+    val Descending = Value(-1)
+  }
+
   private[mongo] trait QueryDsl extends scalaz.syntax.Ops[ComposableQueryFragment] {
 
     def field: String
@@ -78,11 +87,13 @@ package object mongo {
     def $in[T: Values](vs: Iterable[T]) = self.copy(field, update(asJavaIterable(vs), "$in"))
     def $all[T: Values](vs: Iterable[T]) = self.copy(field, update(asJavaIterable(vs), "$all"))
     def $nin[T: Values](vs: Iterable[T]) = self.copy(field, update(asJavaIterable(vs), "$nin"))
+
+    //def sort(sField: String, ord: Order.Value) = self.copy(sort = Option(new BasicDBObject(sField, ord.id)))
   }
 
   private[mongo] case class EqQueryFragment(override val q: BasicDBObject) extends QueryBuilder
 
-  private[mongo] case class ComposableQueryFragment(val field: String, val nested: Option[BasicDBObject]) extends QueryDsl with QueryBuilder {
+  private[mongo] case class ComposableQueryFragment(val field: String, val nested: Option[BasicDBObject] /*,override val sort: Option[DBObject]*/ ) extends QueryDsl with QueryBuilder /*with SortedQuery*/ {
     override val self = this
     override def q = new BasicDBObject(field, nested.fold(new BasicDBObject())(x ⇒ x))
     override def toString() = q.toString

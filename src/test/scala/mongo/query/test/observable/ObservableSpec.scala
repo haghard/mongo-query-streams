@@ -44,11 +44,11 @@ class ObservableSpec extends Specification {
 
   implicit object RxStreamer extends Streamer[Observable] {
     import com.mongodb._
-    override def create[T](q: BasicDBObject, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): Observable[T] = {
+    override def create[T](q: QuerySettings, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): Observable[T] = {
       Observable { subscriber: Subscriber[T] ⇒
         subscriber.setProducer(new Producer() {
           lazy val cursor: Option[DBCursor] = (Try {
-            Option(client.getDB(db).getCollection(coll).find(q))
+            Option(client.getDB(db).getCollection(coll).find(q.q))
           } recover {
             case e: Throwable ⇒
               subscriber.onError(e)
