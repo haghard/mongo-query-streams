@@ -21,29 +21,36 @@ import scala.util.{ Failure, Success, Try }
 import scalaz.stream._
 import java.util.concurrent.{ ExecutorService, TimeUnit }
 import com.mongodb.{ DBObject, MongoClient, MongoException }
+import scalaz.Scalaz._
+import scalaz.stream.Process._
+import scalaz.stream.process1._
 
-package object query {
-  import scalaz.Scalaz._
-  import scalaz.stream.Process._
-  import scalaz.stream.process1._
+package object query { self ⇒
 
   type MongoChannel[T, A] = Channel[Task, T, Process[Task, A]]
 
-  case class QuerySetting(q: DBObject, db: String, collName: String, sortQuery: Option[DBObject],
-                          limit: Option[Int], skip: Option[Int], maxTimeMS: Option[Long])
+  case class QuerySetting(q: DBObject, db: String, cName: String, sortQuery: Option[DBObject],
+                          limit: Option[Int], skip: Option[Int], maxTimeMS: Option[Long],
+                          readPref: Option[ReadPreference])
 
-  trait MongoStreamFactory[T] {
-    def createMStream(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[T, DBObject]
+  trait DBChannelFactory[T] {
+    def createChannel(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[T, DBObject]
   }
 
+  /**
+   *
+   * @param out MongoChannel[T, A]
+   * @tparam T - MongoClient or Db
+   * @tparam A
+   */
   case class DBChannel[T, A](val out: MongoChannel[T, A]) {
 
     private def liftP[B](f: Process[Task, A] ⇒ Process[Task, B]): DBChannel[T, B] =
-      DBChannel(out.map(step ⇒ step.andThen(task ⇒ task.map(p ⇒ f(p)))))
+      DBChannel { out.map(step ⇒ step.andThen(task ⇒ task.map(p ⇒ f(p)))) }
 
     private def pipe[B](p2: Process1[A, B]): DBChannel[T, B] = liftP(_.pipe(p2))
 
-    def |>[B](p2: Process1[A, B]): DBChannel[T, B] = pipe(p2)
+    private[mongo] def |>[B](p2: Process1[A, B]): DBChannel[T, B] = pipe(p2)
 
     /**
      *
@@ -61,8 +68,8 @@ package object query {
      */
     def flatMap[B](f: A ⇒ DBChannel[T, B]): DBChannel[T, B] = DBChannel {
       out.map(
-        (g: T ⇒ Task[Process[Task, A]]) ⇒ (task: T) ⇒
-          g(task).map { p ⇒
+        (step: T ⇒ Task[Process[Task, A]]) ⇒ (task: T) ⇒
+          step(task).map { p ⇒
             p.flatMap((a: A) ⇒
               f(a).out.flatMap(h ⇒ eval(h(task)).flatMap(i ⇒ i)))
           }
@@ -191,6 +198,7 @@ package object query {
     private[query] var query: String \/ Option[DBObject] = \/-(None)
     private[query] var dbName: Option[String] = None
     private[query] var sortQuery: String \/ Option[DBObject] = \/-(None)
+    private[query] var readPreference: Option[ReadPreference] = None
 
     private val parser = mongo.mqlparser.MqlParser()
 
@@ -221,10 +229,12 @@ package object query {
 
     def collection(name: String): Unit = collectionName = Some(name)
 
+    def readPreference(r: ReadPreference): Unit = readPreference = Some(r)
+
     def build(): String \/ QuerySetting
   }
 
-  def create[T](f: MutableBuilder ⇒ Unit)(implicit pool: ExecutorService, q: MongoStreamFactory[T]): DBChannel[T, DBObject] = {
+  def create[T](f: MutableBuilder ⇒ Unit)(implicit pool: ExecutorService, q: DBChannelFactory[T]): DBChannel[T, DBObject] = {
     val builder = new MutableBuilder {
       override def build(): String \/ QuerySetting =
         for {
@@ -233,15 +243,15 @@ package object query {
           db ← dbName \/> "DB name shouldn't be empty"
           c ← collectionName \/> "Collection name shouldn't be empty"
           s ← sortQuery
-        } yield QuerySetting(q, db, c, s, limit, skip, maxTimeMS)
+        } yield QuerySetting(q, db, c, s, limit, skip, maxTimeMS, readPreference)
     }
     f(builder)
-    q createMStream builder.build
+    q createChannel builder.build
   }
 
   //default
-  implicit object default extends MongoStreamFactory[MongoClient] {
-    override def createMStream(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[MongoClient, DBObject] = {
+  implicit object default extends DBChannelFactory[MongoClient] {
+    override def createChannel(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[MongoClient, DBObject] = {
       arg match {
         case \/-(setting) ⇒
           DBChannel(eval(Task now { client: MongoClient ⇒
@@ -249,19 +259,20 @@ package object query {
               val logger = Logger.getLogger("query")
               scalaz.stream.io.resource(
                 Task delay {
-                  val collection = client.getDB(setting.db).getCollection(setting.collName)
-                  val c = collection.find(setting.q)
-                  setting.sortQuery.foreach(c.sort(_))
-                  setting.skip.foreach(c.skip(_))
-                  setting.limit.foreach(c.limit(_))
-                  setting.maxTimeMS.foreach(c.maxTime(_, TimeUnit.MILLISECONDS))
-                  logger.debug(s"Cursor: ${c.##} Query: ${setting.q} Sort: ${setting.sortQuery}")
-                  c
+                  val collection = client.getDB(setting.db).getCollection(setting.cName)
+                  var cursor = collection.find(setting.q)
+                  cursor = setting.readPref.fold(cursor) { p ⇒ cursor.setReadPreference(p.asMongoDbReadPreference) }
+                  setting.sortQuery.foreach(cursor.sort(_))
+                  setting.skip.foreach(cursor.skip(_))
+                  setting.limit.foreach(cursor.limit(_))
+                  setting.maxTimeMS.foreach(cursor.maxTime(_, TimeUnit.MILLISECONDS))
+                  val rpLine = setting.readPref.fold("Empty") { p ⇒ p.asMongoDbReadPreference.toString }
+                  logger.debug(s"Cursor:${cursor.##} ReadPref:[$rpLine}] Server:[${cursor.getServerAddress}] Sort:[${setting.sortQuery}] Skip:[${setting.skip}] Query:[${setting.q}]")
+                  cursor
                 })(c ⇒ Task.delay(c.close)) { c ⇒
                   Task.delay {
-                    if (c.hasNext) {
-                      c.next
-                    } else {
+                    if (c.hasNext) c.next
+                    else {
                       logger.debug(s"Cursor: ${c.##} is exhausted")
                       throw Cause.Terminated(Cause.End)
                     }

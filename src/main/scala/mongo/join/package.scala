@@ -27,7 +27,7 @@ package object join {
   /**
    * Base abstraction for types in Join domain
    */
-  trait DBTypes {
+  trait DBModule {
     type Client = com.mongodb.MongoClient
     type DBRecord = com.mongodb.BasicDBObject
     type Cursor = com.mongodb.Cursor
@@ -41,7 +41,7 @@ package object join {
    * Base abstraction for methods in Join domain
    * @tparam T
    */
-  abstract class Joiner[T <: DBTypes] {
+  abstract class Joiner[T <: DBModule] {
     protected var log: Logger = null
     protected var client: T#Client = null
     protected var exec: ExecutorService = null
@@ -122,11 +122,11 @@ package object join {
   }
 
   object Joiner {
-    def apply[T <: DBTypes](implicit j: Joiner[T], c: T#Client, log: Logger, pool: ExecutorService): Joiner[T] =
+    def apply[T <: DBModule](implicit j: Joiner[T], c: T#Client, log: Logger, pool: ExecutorService): Joiner[T] =
       j.withExecutor(pool).withLogger(log).withClient(c)
   }
 
-  case class Join[T <: DBTypes: Joiner](implicit pool: ExecutorService, c: T#Client, t: ClassTag[T]) {
+  case class Join[T <: DBModule: Joiner](implicit pool: ExecutorService, c: T#Client, t: ClassTag[T]) {
 
     implicit val logger = Logger.getLogger(s"${t.runtimeClass.getName.dropWhile(_ != '$').drop(1)}-Joiner")
 

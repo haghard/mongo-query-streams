@@ -149,7 +149,7 @@ Here's a basic example how to build query, run and get results:
 
 Big win there is that `products` value incapsulates a full interaction lifecycle for with mongo client (get db by name, get collection by name, submit query with preferences, fetch records from cursor, close the cursor). If exception occurs cursor will be closed.
 
-We do support join between 2 collections and 2 different streaming library [RxScala](https://github.com/ReactiveX/RxScala.git) and [ScalazStream](https://github.com/scalaz/scalaz-stream) through single type `mongo.join.Join` which can by parametrized with `ProcessS` and `ObservableS`   
+We do support join between 2 collections and 2 different streaming library [RxScala](https://github.com/ReactiveX/RxScala.git) and [ScalazStream](https://github.com/scalaz/scalaz-stream) through single type `mongo.join.Join` which can by parametrized with `ProcessStream` and `ObservableStream`   
 
 We have two methods for join collections: `joinByPk` and `join`. If you fine with output type from left stream only with key field you should use `joinByPk`. If you aren't, than use `join` for unlimited possibilities in output type.
      
@@ -161,7 +161,7 @@ Here's a example of how you can do joinByPk between collections `LANGS` and `PRO
   import dsl3._
   import Query._
   import scalaz.stream.Process
-  import mongo.join.process.ProcessS
+  import mongo.join.process.ProcessStream
   
   val buffer = Buffer.empty[String]
   val Sink = scalaz.stream.io.fillBuffer(buffer)
@@ -197,7 +197,7 @@ Join using `rx.lang.scala.Observable`
   import Query._
   import rx.lang.scala.Subscriber  
   import rx.lang.scala.schedulers.ExecutionContextScheduler
-  import mongo.join.observable.ObservableS
+  import mongo.join.observable.ObservableStream
   
   val buffer = Buffer.empty[String]
   val Sink = io.fillBuffer(buffer)

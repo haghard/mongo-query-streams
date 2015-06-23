@@ -31,7 +31,7 @@ scalacOptions ++= Seq(
   "-target:jvm-1.7"
 )
 
-val MongoDriverVersion = "2.13.0"
+val MongoDriverVersion = "3.0.2"
 val ScalazStreamVersion = "0.7.1a"
 val RxScala = "0.25.0"
 val localMvnRepo = "/Volumes/Data/dev_build_tools/apache-maven-3.1.1/repository"
@@ -55,7 +55,7 @@ libraryDependencies ++= Seq(
     "org.mongodb"       %   "mongo-java-driver" %   MongoDriverVersion  withSources(),
     "org.scalaz.stream" %%  "scalaz-stream"     %   ScalazStreamVersion withSources(),
     "io.reactivex"      %%  "rxscala"           %   RxScala             withSources(),
-    "com.chuusai"       %%  "shapeless"         %   "2.2.2",
+    "com.chuusai"       %%  "shapeless"         %   "2.2.3",
     "log4j"             %   "log4j"             %   "1.2.14")
 
 libraryDependencies ++= Seq(

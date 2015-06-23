@@ -21,7 +21,7 @@ import java.util.concurrent.{ ThreadLocalRandom, TimeUnit, ExecutorService, Exec
 import de.bwaldvogel.mongo.MongoServer
 import de.bwaldvogel.mongo.backend.memory.MemoryBackend
 import mongo.{ query, NamedThreadFactory }
-import mongo.query.{ DBChannel, MongoStreamFactory, QuerySetting }
+import mongo.query.{ DBChannel, DBChannelFactory, QuerySetting }
 import org.apache.log4j.Logger
 
 import scala.collection.JavaConversions._
@@ -37,11 +37,6 @@ object MongoIntegrationEnv {
   private val logger = org.apache.log4j.Logger.getLogger("mongo-streams")
 
   implicit val executor = Executors.newFixedThreadPool(5, new NamedThreadFactory("mongo-test-worker"))
-
-  //val asArticleId = lift { obj: DBObject ⇒ obj.get("article").asInstanceOf[Int] }
-  //val asArticleIdsStr = lift { obj: DBObject ⇒ obj.get("article").asInstanceOf[Int].toString }
-  //val asNameStr = lift { obj: DBObject ⇒ obj.get("name").toString }
-  //val asNum = lift { obj: DBObject ⇒ obj.get("producer_num").asInstanceOf[Int] }
 
   val categoryIds = lift { obj: DBObject ⇒
     (obj.get("name").asInstanceOf[String],
@@ -142,22 +137,24 @@ object MongoIntegrationEnv {
   /**
    * used in test cases
    */
-  implicit object TestCaseFactory extends MongoStreamFactory[DB] {
-    override def createMStream(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[DB, DBObject] = {
+  implicit object TestCaseFactory extends DBChannelFactory[DB] {
+    override def createChannel(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[DB, DBObject] = {
       arg match {
-        case \/-(set) ⇒
+        case \/-(setting) ⇒
           query.DBChannel {
             eval(Task.now { db: DB ⇒
               Task {
                 scalaz.stream.io.resource(
                   Task delay {
-                    val collection = db.getCollection(set.collName)
-                    val cursor = collection.find(set.q)
-                    set.sortQuery.foreach(cursor.sort(_))
-                    set.skip.foreach(cursor.skip(_))
-                    set.limit.foreach(cursor.limit(_))
-                    set.maxTimeMS.foreach(cursor.maxTime(_, TimeUnit.MILLISECONDS))
-                    logger.debug(s"Cursor: ${cursor.##} Query: ${set.q} Sort: ${set.sortQuery}")
+                    val collection = db.getCollection(setting.cName)
+                    var cursor = collection.find(setting.q)
+                    cursor = setting.readPref.fold(cursor) { p ⇒ cursor.setReadPreference(p.asMongoDbReadPreference) }
+                    setting.sortQuery.foreach(cursor.sort(_))
+                    setting.skip.foreach(cursor.skip(_))
+                    setting.limit.foreach(cursor.limit(_))
+                    setting.maxTimeMS.foreach(cursor.maxTime(_, TimeUnit.MILLISECONDS))
+                    val rpLine = setting.readPref.fold("Empty") { p ⇒ p.asMongoDbReadPreference.toString }
+                    logger.debug(s"Cursor:${cursor.##} ReadPref:[$rpLine}] Server:[${cursor.getServerAddress}] Sort:[${setting.sortQuery}] Skip:[${setting.skip}] Query:[${setting.q}]")
                     cursor
                   })(cursor ⇒ Task.delay(cursor.close)) { c ⇒
                     Task.delay {

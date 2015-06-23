@@ -27,20 +27,20 @@ import rx.lang.scala.Producer
 package object observable {
   import Query._
 
-  trait ObservableS extends DBTypes {
+  trait ObservableStream extends DBModule {
     override type DBStream[Out] = Observable[Out]
   }
 
-  object ObservableS {
+  object ObservableStream {
     trait Fetcher[T] {
       def db: String
       def coll: String
-      def q: ObservableS#DBRecord
-      def c: ObservableS#Client
+      def q: ObservableStream#DBRecord
+      def c: ObservableStream#Client
       def log: Logger
       def subscriber: Subscriber[T]
 
-      lazy val cursor: Option[ObservableS#Cursor] = (Try {
+      lazy val cursor: Option[ObservableStream#Cursor] = (Try {
         Option(c.getDB(db).getCollection(coll).find(q))
       } recover {
         case e: Throwable ⇒
@@ -58,7 +58,7 @@ package object observable {
         }
       }
 
-      def extract(c: ObservableS#Cursor): T = {
+      def extract(c: ObservableStream#Cursor): T = {
         val r = c.next.asInstanceOf[T]
         log.info(s"fetch $r")
         r
@@ -68,21 +68,20 @@ package object observable {
     }
 
     class QueryProducer[T](val subscriber: Subscriber[T], val db: String, val coll: String,
-                           val q: ObservableS#DBRecord, val c: ObservableS#Client, val log: Logger) extends Producer {
+                           val q: ObservableStream#DBRecord, val c: ObservableStream#Client, val log: Logger) extends Producer {
       self: { def fetch(n: Long) } ⇒
       override def request(n: Long) = fetch(n)
     }
 
     trait PKFetcher[T] extends Fetcher[T] {
       def key: String
-      abstract override def extract(c: ObservableS#Cursor): T = {
-        super.extract(c).asInstanceOf[ObservableS#DBRecord].get(key).asInstanceOf[T]
-      }
+      abstract override def extract(c: ObservableStream#Cursor): T =
+        super.extract(c).asInstanceOf[ObservableStream#DBRecord].get(key).asInstanceOf[T]
     }
 
-    implicit object joiner extends Joiner[ObservableS] {
+    implicit object joiner extends Joiner[ObservableStream] {
       //for short
-      type Record = ObservableS#DBRecord
+      type Record = ObservableStream#DBRecord
 
       val scheduler = ExecutionContextScheduler(ExecutionContext.fromExecutor(exec))
 
@@ -111,7 +110,7 @@ package object observable {
        * @tparam A
        * @return
        */
-      override def leftField[A](q: QueryFree[Record], db: String, coll: String, key: String): ObservableS#DBStream[A] =
+      override def leftField[A](q: QueryFree[Record], db: String, coll: String, key: String): ObservableStream#DBStream[A] =
         typedResource[A](createQuery(q), db, coll, key)
 
       /**
@@ -121,7 +120,7 @@ package object observable {
        * @param coll
        * @return
        */
-      override def left(q: QueryFree[Record], db: String, coll: String): Observable[ObservableS#DBRecord] =
+      override def left(q: QueryFree[Record], db: String, coll: String): Observable[ObservableStream#DBRecord] =
         resource[Record](createQuery(q), db, coll)
 
       /**
@@ -133,7 +132,7 @@ package object observable {
        * @tparam B
        * @return
        */
-      override def relationField[A, B](r: (A) ⇒ QueryFree[Record], db: String, coll: String): (A) ⇒ ObservableS#DBStream[B] =
+      override def relationField[A, B](r: (A) ⇒ QueryFree[Record], db: String, coll: String): (A) ⇒ ObservableStream#DBStream[B] =
         id ⇒
           resource[B](createQuery(r(id)), db, coll)
 
@@ -148,9 +147,9 @@ package object observable {
         id ⇒
           resource[Record](createQuery(r(id)), db, coll)
 
-      override def innerJoin[A, B, C](l: Observable[A])(relation: (A) ⇒ Observable[B])(f: (A, B) ⇒ C): ObservableS#DBStream[C] =
+      override def innerJoin[A, B, C](left: Observable[A])(relation: (A) ⇒ Observable[B])(f: (A, B) ⇒ C): ObservableStream#DBStream[C] =
         for {
-          id ← l
+          id ← left
           rs ← relation(id).map(f(id, _))
         } yield rs
     }
@@ -160,8 +159,8 @@ package object observable {
     def column[B](name: String): Observable[B] =
       self.map { record ⇒
         record match {
-          case r: ObservableS#DBRecord ⇒ r.get(name).asInstanceOf[B]
-          case other                   ⇒ throw new com.mongodb.MongoException(s"DBObject expected but found ${other.getClass.getName}")
+          case r: ObservableStream#DBRecord ⇒ r.get(name).asInstanceOf[B]
+          case other                        ⇒ throw new com.mongodb.MongoException(s"DBObject expected but found ${other.getClass.getName}")
         }
       }
 

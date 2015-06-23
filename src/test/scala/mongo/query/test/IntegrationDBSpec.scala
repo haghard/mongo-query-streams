@@ -19,13 +19,12 @@ import mongo.query.create
 import mongo._
 import dsl2._
 
-import com.mongodb._
+import com.mongodb.DBObject
 import org.specs2.mutable._
 import org.apache.log4j.Logger
 import scala.collection.JavaConversions._
 import scalaz.stream.Process._
 import scala.collection.mutable._
-import scalaz.stream.process1
 
 //https://twitter.github.io/scala_school/ru/specs.html
 trait Enviroment[T] extends org.specs2.mutable.Before {
@@ -47,6 +46,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
       b.q("producer_num" $eq id)
       b.collection(PRODUCER)
       b.db(TEST_DB)
+      b.readPreference(ReadPreference.Nearest)
     }.column[String]("name")
 
   private def categories(obj: DBObject) = {

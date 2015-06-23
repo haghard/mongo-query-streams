@@ -14,13 +14,44 @@
 
 import java.text.SimpleDateFormat
 import java.util.Date
+import scala.collection.JavaConversions._
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.atomic.AtomicInteger
-import scala.collection.JavaConversions._
-
-import com.mongodb.{ DBObject, BasicDBObject }
+import com.mongodb.{ TagSet, DBObject, BasicDBObject }
 
 package object mongo {
+
+  object ReadPreference extends Enumeration {
+    val Primary, Secondary, Nearest = Value
+  }
+
+  implicit def mrpToReadPreference(rp: ReadPreference.Value) = ReadPreference(rp)
+
+  case class ReadPreference(pref: ReadPreference.Value, preferred: Boolean = false, tag: List[TagSet] = Nil) {
+    import scala.collection.JavaConverters._
+    import com.mongodb.{ ReadPreference ⇒ NativeReadPreference }
+
+    def preferred(b: Boolean): ReadPreference = copy(preferred = true)
+
+    def tags(ts: List[TagSet]): ReadPreference = copy(tag = tag ++ ts)
+
+    private[mongo] val asMongoDbReadPreference: NativeReadPreference = this match {
+      case ReadPreference(ReadPreference.Nearest, _, Nil)            ⇒ NativeReadPreference.nearest()
+      case ReadPreference(ReadPreference.Nearest, _, h :: Nil)       ⇒ NativeReadPreference.nearest(h)
+      case ReadPreference(ReadPreference.Nearest, _, h :: t)         ⇒ NativeReadPreference.nearest((h :: t).asJava)
+      case ReadPreference(ReadPreference.Primary, true, Nil)         ⇒ NativeReadPreference.primaryPreferred()
+      case ReadPreference(ReadPreference.Primary, true, h :: Nil)    ⇒ NativeReadPreference.primaryPreferred(h)
+      case ReadPreference(ReadPreference.Primary, true, h :: t)      ⇒ NativeReadPreference.primaryPreferred((h :: t).asJava)
+      case ReadPreference(ReadPreference.Primary, false, Nil)        ⇒ NativeReadPreference.primary()
+      case ReadPreference(ReadPreference.Secondary, true, Nil)       ⇒ NativeReadPreference.secondaryPreferred()
+      case ReadPreference(ReadPreference.Secondary, true, h :: Nil)  ⇒ NativeReadPreference.secondaryPreferred(h)
+      case ReadPreference(ReadPreference.Secondary, true, h :: t)    ⇒ NativeReadPreference.secondaryPreferred((h :: t).asJava)
+      case ReadPreference(ReadPreference.Secondary, false, Nil)      ⇒ NativeReadPreference.secondary()
+      case ReadPreference(ReadPreference.Secondary, false, h :: Nil) ⇒ NativeReadPreference.secondary(h)
+      case ReadPreference(ReadPreference.Secondary, false, h :: t)   ⇒ NativeReadPreference.secondary((h :: t).asJava)
+      case ReadPreference(ReadPreference.Primary, false, nonEmpty)   ⇒ sys.error("not supported")
+    }
+  }
 
   sealed private[mongo] trait QueryBuilder {
     def q: BasicDBObject
