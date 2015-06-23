@@ -59,8 +59,8 @@ package object dsl3 { outer ⇒
     case class EqOp(q: BasicDBObject) extends StatementOp[QuerySettings]
     case class ChainOp(q: BasicDBObject) extends StatementOp[QuerySettings]
     case class Filter(q: BasicDBObject) extends StatementOp[QuerySettings]
-    //case class Skip(n: Int) extends StatementOp[QuerySettings]
-    //case class Limit(n: Int) extends StatementOp[QuerySettings]
+    case class Skip(n: Int) extends StatementOp[QuerySettings]
+    case class Limit(n: Int) extends StatementOp[QuerySettings]
 
     type QueryFree[A] = scalaz.Free.FreeC[StatementOp, A]
 
@@ -77,6 +77,8 @@ package object dsl3 { outer ⇒
     implicit def f2FreeM(q: mongo.EqQueryFragment): QueryFree[QuerySettings] = liftFC(EqOp(q.q))
     implicit def c2FreeM(q: mongo.ComposableQueryFragment): QueryFree[QuerySettings] = liftFC(ChainOp(q.q))
     implicit def sort2FreeM(kv: (String, mongo.Order.Value)): QueryFree[QuerySettings] = liftFC(Filter(new BasicDBObject(kv._1, kv._2.id)))
+    def skip(n: Int): QueryFree[QuerySettings] = liftFC(Skip(n))
+    def limit(n: Int): QueryFree[QuerySettings] = liftFC(Limit(n))
 
     type QueryS[T] = scalaz.State[QuerySettings, T]
 
@@ -91,14 +93,15 @@ package object dsl3 { outer ⇒
             (in.copy(q = new BasicDBObject(mapAsJavaMap(mapAsScalaMap(in.q.toMap) ++ mapAsScalaMap(q.toMap)))), in)
           }
         case Filter(q) ⇒ scalaz.State { (in: QuerySettings) ⇒ (in.copy(sort = Option(q)), in) }
+        case Skip(n)   ⇒ scalaz.State { (in: QuerySettings) ⇒ (in.copy(skip = Option(n)), in) }
+        case Limit(n)  ⇒ scalaz.State { (in: QuerySettings) ⇒ (in.copy(limit = Option(n)), in) }
       }
     }
 
     def query(rq: QueryFree[QuerySettings]): FreeApp[QuerySettings] =
       for {
-        _ ← LogQuery.debug(s"Incoming query")
+        _ ← LogQuery.debug("Construct query")
         q = (runFC[StatementOp, QueryS, QuerySettings](rq)(GeneralQueryInterpreter)).run(init)._1
-        _ ← LogQuery.debug(s"Query: ${q.toString}")
       } yield q
   }
 
@@ -146,9 +149,9 @@ package object dsl3 { outer ⇒
                 db: String, coll: String, mode: FetchMode.Type): FreeApp[NonEmptyResult] =
       for {
         qs ← createQuery(rq)
-        r ← if (mode == FetchMode.One) readOne(client, qs, db, coll)
-        else readBatch(client, qs, db, coll)
-        _ ← LogInteraction.debug(s"Fetched result: ${r}")
+        _ ← LogInteraction.debug(s"Query:[ ${qs.q} ] Sort:[${qs.sort}] Skip:[${qs.skip}] Limit: ${qs.limit}")
+        r ← if (mode == FetchMode.One) readOne(client, qs, db, coll) else readBatch(client, qs, db, coll)
+        _ ← LogInteraction.debug(s"fetch: $r")
       } yield (r)
 
     object ApacheLog4jTrans extends (Log ~> Id) {

@@ -68,14 +68,15 @@ class IntegrationMongoStreamsSpec extends Specification {
 
     val p = for {
       _ ← "index" $gte 0 $lte 5
-      q ← ("index" -> Order.Ascending)
+      _ ← ("index" -> Order.Ascending)
+      q ← limit(4)
     } yield q
 
     val out = p.list(client, TEST_DB, LANGS).attemptRun
     out.isRight === true
     out.toOption.get.isRight === true
     val r = out.toOption.get.toOption.get
-    r.get(BatchPrefix).asInstanceOf[java.util.List[DBObject]].size() === 5
+    r.get(BatchPrefix).asInstanceOf[java.util.List[DBObject]].size() === 4
   }
 
   /*
