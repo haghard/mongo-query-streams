@@ -253,21 +253,21 @@ package object query { self ⇒
   implicit object default extends DBChannelFactory[MongoClient] {
     override def createChannel(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[MongoClient, DBObject] = {
       arg match {
-        case \/-(setting) ⇒
+        case \/-(qs) ⇒
           DBChannel(eval(Task now { client: MongoClient ⇒
             Task {
               val logger = Logger.getLogger("query")
               scalaz.stream.io.resource(
                 Task delay {
-                  val collection = client.getDB(setting.db).getCollection(setting.cName)
-                  var cursor = collection.find(setting.q)
-                  cursor = setting.readPref.fold(cursor) { p ⇒ cursor.setReadPreference(p.asMongoDbReadPreference) }
-                  setting.sortQuery.foreach(cursor.sort(_))
-                  setting.skip.foreach(cursor.skip(_))
-                  setting.limit.foreach(cursor.limit(_))
-                  setting.maxTimeMS.foreach(cursor.maxTime(_, TimeUnit.MILLISECONDS))
-                  val rpLine = setting.readPref.fold("Empty") { p ⇒ p.asMongoDbReadPreference.toString }
-                  logger.debug(s"Cursor:${cursor.##} ReadPref:[$rpLine}] Server:[${cursor.getServerAddress}] Sort:[${setting.sortQuery}] Skip:[${setting.skip}] Query:[${setting.q}]")
+                  val collection = client.getDB(qs.db).getCollection(qs.cName)
+                  var cursor = collection.find(qs.q)
+                  cursor = qs.readPref.fold(cursor) { p ⇒ cursor.setReadPreference(p.asMongoDbReadPreference) }
+                  qs.sortQuery.foreach(cursor.sort(_))
+                  qs.skip.foreach(cursor.skip(_))
+                  qs.limit.foreach(cursor.limit(_))
+                  qs.maxTimeMS.foreach(cursor.maxTime(_, TimeUnit.MILLISECONDS))
+                  val rpLine = qs.readPref.fold("Empty") { p ⇒ p.asMongoDbReadPreference.toString }
+                  logger.debug(s"Cursor:${cursor.##} ReadPref:[$rpLine}] Server:[${cursor.getServerAddress}] Sort:[${qs.sortQuery}] Limit:[${qs.limit}] Skip:[${qs.skip}] Query:[${qs.q}]")
                   cursor
                 })(c ⇒ Task.delay(c.close)) { c ⇒
                   Task.delay {

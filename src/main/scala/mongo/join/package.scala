@@ -70,7 +70,7 @@ package object join {
      * @return
      */
     protected def createQuery(q: QueryFree[T#QuerySettings]): QuerySettings =
-      scalaz.Free.runFC[StatementOp, QueryS, T#QuerySettings](q)(Query.GeneralQueryInterpreter).run(init)._1
+      scalaz.Free.runFC[StatementOp, QueryS, T#QuerySettings](q)(Query.QueryInterpreter).run(init)._1
 
     /**
      *

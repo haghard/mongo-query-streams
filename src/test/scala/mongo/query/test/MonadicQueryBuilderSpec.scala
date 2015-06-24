@@ -22,7 +22,8 @@ import org.specs2.mutable.Specification
 class MonadicQueryBuilderSpec extends Specification {
 
   import mongo._
-  import dsl._
+  import dsl3._
+  import Query._
 
   "monadic query" should {
     "be parsed" in {

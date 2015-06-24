@@ -14,14 +14,17 @@
 
 package mongo
 
-import mongo.dsl3.Query.QueryS
+import scala.util.Try
 import mongo.query.DBChannel
+import scalaz.concurrent.Task
 import scala.annotation.tailrec
 import scala.collection.JavaConversions._
-import scalaz.concurrent.Task
+import scala.concurrent.ExecutionContext
 import java.util.concurrent.ExecutorService
+import rx.lang.scala.schedulers.ExecutionContextScheduler
+import rx.lang.scala.{ Producer, Subscriber, Observable }
 import scalaz.{ Free, Coyoneda, \/, -\/, \/-, Trampoline, ~> }
-import com.mongodb.{ DBCursor, DBObject, BasicDBObject, MongoClient }
+import com.mongodb.{ DBObject, DBCursor, BasicDBObject, MongoClient }
 
 import scala.collection.JavaConversions.mapAsJavaMap
 import scala.collection.JavaConversions.mapAsScalaMap
@@ -30,6 +33,7 @@ package object dsl3 { outer ⇒
   import scalaz.stream.Process
 
   type MProcess[Out] = Process[Task, Out]
+
   type MStream[Out] = DBChannel[MongoClient, Out]
 
   object FetchMode extends Enumeration {
@@ -56,9 +60,9 @@ package object dsl3 { outer ⇒
     import scalaz.Free.runFC
 
     sealed trait StatementOp[T]
-    case class EqOp(q: BasicDBObject) extends StatementOp[QuerySettings]
-    case class ChainOp(q: BasicDBObject) extends StatementOp[QuerySettings]
-    case class Filter(q: BasicDBObject) extends StatementOp[QuerySettings]
+    case class EqOp(q: DBObject) extends StatementOp[QuerySettings]
+    case class ChainOp(q: DBObject) extends StatementOp[QuerySettings]
+    case class Sort(q: DBObject) extends StatementOp[QuerySettings]
     case class Skip(n: Int) extends StatementOp[QuerySettings]
     case class Limit(n: Int) extends StatementOp[QuerySettings]
 
@@ -76,13 +80,20 @@ package object dsl3 { outer ⇒
 
     implicit def f2FreeM(q: mongo.EqQueryFragment): QueryFree[QuerySettings] = liftFC(EqOp(q.q))
     implicit def c2FreeM(q: mongo.ComposableQueryFragment): QueryFree[QuerySettings] = liftFC(ChainOp(q.q))
-    implicit def sort2FreeM(kv: (String, mongo.Order.Value)): QueryFree[QuerySettings] = liftFC(Filter(new BasicDBObject(kv._1, kv._2.id)))
+    implicit def sort2FreeM(kv: (String, mongo.Order.Value)): QueryFree[QuerySettings] = liftFC(Sort(new BasicDBObject(kv._1, kv._2.id)))
+
+    def sort(h: (String, Order.Value), t: (String, Order.Value)*): QueryFree[QuerySettings] = {
+      liftFC(Sort(t.toList.foldLeft(new BasicDBObject(h._1, h._2.id)) { (acc, c) ⇒
+        acc.append(c._1, c._2.id)
+      }))
+    }
+
     def skip(n: Int): QueryFree[QuerySettings] = liftFC(Skip(n))
     def limit(n: Int): QueryFree[QuerySettings] = liftFC(Limit(n))
 
     type QueryS[T] = scalaz.State[QuerySettings, T]
 
-    object GeneralQueryInterpreter extends (Query.StatementOp ~> QueryS) {
+    object QueryInterpreter extends (Query.StatementOp ~> QueryS) {
       def apply[T](op: Query.StatementOp[T]): QueryS[T] = op match {
         case EqOp(q) ⇒
           scalaz.State { (in: QuerySettings) ⇒
@@ -92,16 +103,16 @@ package object dsl3 { outer ⇒
           scalaz.State { (in: QuerySettings) ⇒
             (in.copy(q = new BasicDBObject(mapAsJavaMap(mapAsScalaMap(in.q.toMap) ++ mapAsScalaMap(q.toMap)))), in)
           }
-        case Filter(q) ⇒ scalaz.State { (in: QuerySettings) ⇒ (in.copy(sort = Option(q)), in) }
-        case Skip(n)   ⇒ scalaz.State { (in: QuerySettings) ⇒ (in.copy(skip = Option(n)), in) }
-        case Limit(n)  ⇒ scalaz.State { (in: QuerySettings) ⇒ (in.copy(limit = Option(n)), in) }
+        case Sort(q)  ⇒ scalaz.State { (in: QuerySettings) ⇒ (in.copy(sort = Option(q)), in) }
+        case Skip(n)  ⇒ scalaz.State { (in: QuerySettings) ⇒ (in.copy(skip = Option(n)), in) }
+        case Limit(n) ⇒ scalaz.State { (in: QuerySettings) ⇒ (in.copy(limit = Option(n)), in) }
       }
     }
 
     def query(rq: QueryFree[QuerySettings]): FreeApp[QuerySettings] =
       for {
         _ ← LogQuery.debug("Construct query")
-        q = (runFC[StatementOp, QueryS, QuerySettings](rq)(GeneralQueryInterpreter)).run(init)._1
+        q = (runFC[StatementOp, QueryS, QuerySettings](rq)(QueryInterpreter)).run(init)._1
       } yield q
   }
 
@@ -138,27 +149,31 @@ package object dsl3 { outer ⇒
     def readBatch(client: MongoClient, q: QuerySettings, db: String, coll: String): FreeApp[NonEmptyResult] =
       lift(ReadBatch(client, q, db, coll))
 
-    def createQuery(rq: Query.QueryFree[QuerySettings]): FreeApp[QuerySettings] =
-      lift(Query.query(rq))
+    def createQuery(rq: Query.QueryFree[QuerySettings]): FreeApp[QuerySettings] = lift(Query.query(rq))
 
     object LogInteraction {
       def debug(msg: String) = Copoyo[InteractionApp](LogMsg(DebugLevel, msg))
+      def info(msg: String) = Copoyo[InteractionApp](LogMsg(InfoLevel, msg))
+      def warn(msg: String) = Copoyo[InteractionApp](LogMsg(WarnLevel, msg))
+      def error(msg: String) = Copoyo[InteractionApp](LogMsg(ErrorLevel, msg))
     }
 
     def program(rq: Query.QueryFree[QuerySettings], client: MongoClient,
                 db: String, coll: String, mode: FetchMode.Type): FreeApp[NonEmptyResult] =
       for {
         qs ← createQuery(rq)
-        _ ← LogInteraction.debug(s"Query:[ ${qs.q} ] Sort:[${qs.sort}] Skip:[${qs.skip}] Limit: ${qs.limit}")
+        _ ← LogInteraction.debug(s"Query:[ ${qs.q} ] Sort:[ ${qs.sort} ] Skip:[ ${qs.skip} ] Limit:[ ${qs.limit} ]")
         r ← if (mode == FetchMode.One) readOne(client, qs, db, coll) else readBatch(client, qs, db, coll)
         _ ← LogInteraction.debug(s"fetch: $r")
       } yield (r)
 
-    object ApacheLog4jTrans extends (Log ~> Id) {
+    object ApacheLog4jTransformation extends (Log ~> Id) {
       val logger = org.apache.log4j.Logger.getLogger("mongo-query")
-
       def apply[A](a: Log[A]) = a match {
-        case LogMsg(lvl, msg) ⇒ logger.debug(s"$lvl: $msg")
+        case LogMsg(DebugLevel, msg) ⇒ logger.debug(msg)
+        case LogMsg(InfoLevel, msg)  ⇒ logger.info(msg)
+        case LogMsg(WarnLevel, msg)  ⇒ logger.warn(msg)
+        case LogMsg(ErrorLevel, msg) ⇒ logger.error(msg)
       }
     }
 
@@ -172,7 +187,7 @@ package object dsl3 { outer ⇒
       def apply[A](a: A): Trampoline[A] = Trampoline.done(a)
     }
 
-    object BatchTrans extends (MongoInteractionOp ~> Id) {
+    object BatchQueryTransformation extends (MongoInteractionOp ~> Id) {
       @tailrec def go[A](cursor: DBCursor, list: Vector[A]): Vector[A] =
         if (cursor.hasNext) {
           val r = cursor.next.asInstanceOf[A]
@@ -200,47 +215,95 @@ package object dsl3 { outer ⇒
       }
     }
 
-    val qInterpreter: Query.QueryApp ~> Id = QueryTrans ||: ApacheLog4jTrans
+    val qInterpreter: Query.QueryApp ~> Id = QueryTrans ||: ApacheLog4jTransformation
     val qInterpreterCoyo: Query.CoyoApp ~> Id = liftCoyoLeft(qInterpreter)
     val qInterpreterFree: Query.FreeApp ~> Id = liftFree(qInterpreterCoyo)
 
-    val intInterpreter: Interaction.InteractionApp ~> Id = BatchTrans ||: ApacheLog4jTrans ||: qInterpreterFree
+    val intInterpreter: Interaction.InteractionApp ~> Id = BatchQueryTransformation ||: ApacheLog4jTransformation ||: qInterpreterFree
     val intInterpreterCoyo: Interaction.CoyoApp ~> Id = liftCoyoLeft(intInterpreter)
 
     trait Streamer[M[_]] {
-      protected val logger = org.apache.log4j.Logger.getLogger("mongo-query")
+      protected val logger = org.apache.log4j.Logger.getLogger("streamer-query")
       def create[T](q: QuerySettings, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): M[T]
     }
 
-    object Streamer {
-      private def mongoR[T](q: DBObject, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): Process[Task, T] = {
-        io.resource(Task.delay(client.getDB(db).getCollection(coll).find(q)))(c ⇒ Task.delay(c.close)) { c ⇒
-          Task {
-            if (c.hasNext) {
-              val r = c.next
-              r.asInstanceOf[T]
-            } else throw Cause.Terminated(Cause.End)
-          }
+    trait ChannelStreamer[M[_]] {
+      protected val logger = org.apache.log4j.Logger.getLogger("streamer-channel-query")
+      def create[T](q: QuerySettings, db: String, coll: String)(implicit pool: ExecutorService): M[T]
+    }
+
+    private[dsl3] def mongoResource[T](qs: QuerySettings, client: MongoClient, db: String, collection: String, log: org.apache.log4j.Logger)(implicit pool: ExecutorService): Process[Task, T] = {
+      io.resource(Task.delay {
+        val coll = client.getDB(db).getCollection(collection)
+        val cursor = coll.find(qs.q)
+        qs.sort.foreach(cursor.sort(_))
+        qs.skip.foreach(cursor.skip(_))
+        qs.limit.foreach(cursor.limit(_))
+        log.debug(s"Query-settings: Sort:[ ${qs.sort} ] Skip:[ ${qs.skip} ] Limit:[ ${qs.limit} ] Query:[ ${qs.q} ]")
+        cursor
+      })(c ⇒ Task.delay(c.close)) { c ⇒
+        Task {
+          if (c.hasNext) {
+            val r = c.next
+            r.asInstanceOf[T]
+          } else throw Cause.Terminated(Cause.End)
         }
       }
+    }
 
+    object ChannelStreamer {
+      implicit object channelStreamerProc extends ChannelStreamer[MStream] {
+        override def create[T](q: QuerySettings, db: String, coll: String)(implicit pool: ExecutorService): MStream[T] =
+          DBChannel(Process.eval(Task.now { client: MongoClient ⇒
+            Task(mongoResource[T](q, client, db, coll, logger))
+          }))
+      }
+    }
+
+    object Streamer {
       implicit object ProcStreamer extends Streamer[MProcess] {
         override def create[T](q: QuerySettings, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): MProcess[T] =
-          mongoR[T](q.q, client, db, coll)
+          mongoResource[T](q, client, db, coll, logger)
       }
 
-      implicit val M = new scalaz.Monad[MStream]() {
-        override def point[T](a: ⇒ T): MStream[T] =
-          DBChannel(Process.eval(Task.now { client: MongoClient ⇒
-            Task(Process.eval(Task.delay(a)))
-          }))
+      implicit object RxStreamer extends Streamer[Observable] {
+        import com.mongodb._
+        override def create[T](qs: QuerySettings, client: MongoClient, db: String, collection: String)(implicit pool: ExecutorService): Observable[T] = {
+          Observable { subscriber: Subscriber[T] ⇒
+            subscriber.setProducer(new Producer() {
+              lazy val cursor: Option[DBCursor] = (Try {
+                Option {
+                  val coll = client.getDB(db).getCollection(collection)
+                  val cursor = coll.find(qs.q)
+                  qs.sort.foreach(cursor.sort(_))
+                  qs.skip.foreach(cursor.skip(_))
+                  qs.limit.foreach(cursor.limit(_))
+                  logger.debug(s"Query-settings: Sort:[ ${qs.sort} ] Skip:[ ${qs.skip} ] Limit:[ ${qs.limit} ] Query:[ ${qs.q} ]")
+                  cursor
+                }
+              } recover {
+                case e: Throwable ⇒
+                  subscriber.onError(e)
+                  None
+              }).get
 
-        override def bind[T, B](fa: MStream[T])(f: (T) ⇒ MStream[B]) = fa flatMap f
-      }
+              @tailrec def go(n: Long): Unit = {
+                if (n > 0) {
+                  if (cursor.find(_.hasNext).isDefined) {
+                    val r = cursor.get.next().asInstanceOf[T]
+                    logger.info(s"fetch $r")
+                    subscriber.onNext(r)
+                    go(n - 1)
+                  } else subscriber.onCompleted
+                }
+              }
 
-      implicit object MongoStreamer extends Streamer[MStream] {
-        override def create[T](q: QuerySettings, client: MongoClient /*null*/ , db: String, coll: String)(implicit pool: ExecutorService): MStream[T] = {
-          DBChannel(Process.eval(Task.now { client: MongoClient ⇒ Task(mongoR[T](q.q, client, db, coll)) }))
+              override def request(n: Long): Unit = {
+                logger.info(s"request $n")
+                go(n)
+              }
+            })
+          }.subscribeOn(ExecutionContextScheduler(ExecutionContext.fromExecutor(pool)))
         }
       }
     }
@@ -248,44 +311,75 @@ package object dsl3 { outer ⇒
 
   implicit class ProgramSyntax(val self: Query.QueryFree[QuerySettings]) extends AnyVal {
     import outer.Interaction._
-    import scalaz.Monad
     import scalaz.Free.runFC
+    import mongo.dsl3.Query._
 
+    private def init = QuerySettings(new BasicDBObject)
+
+    /**
+     *
+     * @return DBObject
+     */
+    def toDBObject = ((runFC[StatementOp, QueryS, QuerySettings](self)(QueryInterpreter)).run(init)._1).q
+
+    /**
+     *
+     * @return String
+     */
+    def toQuery = toDBObject.toString
+
+    /**
+     *
+     * @param client
+     * @param db
+     * @param coll
+     * @param pool
+     * @return
+     */
     def findOne(client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService) =
       Task(program(self, client, db, coll, FetchMode.One)
         .foldMap(Trampolined compose intInterpreterCoyo).run)(pool)
 
+    /**
+     *
+     * @param client
+     * @param db
+     * @param coll
+     * @param pool
+     * @return
+     */
     def list(client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): Task[NonEmptyResult] =
       Task(program(self, client, db, coll, FetchMode.Batch)
         .foldMap(Trampolined compose intInterpreterCoyo).run)(pool)
 
     /**
+     * Works only with [[mongo.dsl3.MStream]] type, allows you to do joins for processes
+     *
      *
      * @param db
      * @param coll
-     * @param f
      * @param pool
-     * @param client
      * @tparam M
      * @return
      */
-    def stream[M[_]: Monad](db: String, coll: String)(implicit f: Streamer[M], pool: ExecutorService, client: MongoClient): M[BasicDBObject] =
-      f.create((runFC[Query.StatementOp, QueryS, QuerySettings](self)(Query.GeneralQueryInterpreter)).run(outer.Query.init)._1,
-        client, db, coll)
+    def sChannel[M[_]: ChannelStreamer](db: String, coll: String)(implicit pool: ExecutorService): M[DBObject] =
+      implicitly[ChannelStreamer[M]].create(
+        runFC[Query.StatementOp, QueryS, QuerySettings](self)(Query.QueryInterpreter).run(outer.Query.init)._1, db, coll)
 
     /**
-     *
+     * Works with [[mongo.dsl3.MProcess]], [[rx.lang.scala.Observable]] types
      * @param db
      * @param coll
-     * @param f
      * @param pool
      * @param client
      * @tparam M
      * @return
      */
-    def streamC[M[_]: Monad](db: String, coll: String)(implicit f: Streamer[M], pool: ExecutorService, client: MongoClient): M[BasicDBObject] = {
-      f.create((runFC[Query.StatementOp, QueryS, QuerySettings](self)(Query.GeneralQueryInterpreter)).run(outer.Query.init)._1,
-        client, db, coll)
+    //M[_]: scalaz.Monad
+    //val m = implicitly[scalaz.Monad[M]]
+    def stream[M[_]: Streamer](db: String, coll: String)(implicit pool: ExecutorService, client: MongoClient): M[DBObject] = {
+      implicitly[Streamer[M]].create(
+        (runFC[Query.StatementOp, QueryS, QuerySettings](self)(Query.QueryInterpreter)).run(outer.Query.init)._1, client, db, coll)
     }
   }
 }

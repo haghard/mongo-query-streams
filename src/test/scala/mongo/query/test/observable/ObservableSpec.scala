@@ -15,19 +15,16 @@
 package mongo.query.test.observable
 
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.{ ExecutorService, CountDownLatch }
+import java.util.concurrent.CountDownLatch
 
-import com.mongodb.BasicDBObject
-import mongo.dsl3.Interaction.Streamer
+import com.mongodb.DBObject
 import mongo.query.test.{ MongoIntegrationEnv, MongoStreamsEnviroment }
 import org.specs2.mutable.Specification
 import rx.lang.scala.schedulers.ExecutionContextScheduler
-import rx.lang.scala.{ Producer, Observable, Subscriber }
+import rx.lang.scala.{ Observable, Subscriber }
 
-import scala.annotation.tailrec
 import scala.collection.mutable.Buffer
 import scala.concurrent.ExecutionContext
-import scala.util.Try
 import scalaz.stream.io
 
 class ObservableSpec extends Specification {
@@ -36,44 +33,6 @@ class ObservableSpec extends Specification {
   import dsl3._
   import Query._
   import MongoIntegrationEnv._
-
-  implicit val M = new scalaz.Monad[Observable]() {
-    override def point[A](a: ⇒ A): Observable[A] = Observable.just(a)
-    override def bind[A, B](fa: Observable[A])(f: (A) ⇒ Observable[B]): Observable[B] = fa.flatMap(f)
-  }
-
-  implicit object RxStreamer extends Streamer[Observable] {
-    import com.mongodb._
-    override def create[T](q: QuerySettings, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): Observable[T] = {
-      Observable { subscriber: Subscriber[T] ⇒
-        subscriber.setProducer(new Producer() {
-          lazy val cursor: Option[DBCursor] = (Try {
-            Option(client.getDB(db).getCollection(coll).find(q.q))
-          } recover {
-            case e: Throwable ⇒
-              subscriber.onError(e)
-              None
-          }).get
-
-          @tailrec def go(n: Long): Unit = {
-            if (n > 0) {
-              if (cursor.find(_.hasNext).isDefined) {
-                val r = cursor.get.next().asInstanceOf[T]
-                logger.info(s"fetch $r")
-                subscriber.onNext(r)
-                go(n - 1)
-              } else subscriber.onCompleted
-            }
-          }
-
-          override def request(n: Long): Unit = {
-            logger.info(s"${##} request $n")
-            go(n)
-          }
-        })
-      }.subscribeOn(ExecutionContextScheduler(ExecutionContext.fromExecutor(pool)))
-    }
-  }
 
   "Build query and perform streaming using Observable" in new MongoStreamsEnviroment {
     initMongo
@@ -85,9 +44,9 @@ class ObservableSpec extends Specification {
     val c = new CountDownLatch(1)
     val q = for { ex ← "index" $gte 0 $lt 10 } yield ex
 
-    val s = new Subscriber[BasicDBObject] {
+    val s = new Subscriber[DBObject] {
       override def onStart(): Unit = request(batchSize)
-      override def onNext(n: BasicDBObject): Unit = {
+      override def onNext(n: DBObject): Unit = {
         logger.info(s"receive $n")
         if (responses.incrementAndGet() % batchSize == 0)
           request(batchSize)
@@ -121,8 +80,8 @@ class ObservableSpec extends Specification {
     val qLang = for { q ← "index" $gte 0 $lt 10 } yield q
     def qProgByLang(id: Int) = for { q ← "lang" $eq id } yield q
 
-    val query = qLang.streamC[Observable](TEST_DB, LANGS).column[Int]("index")
-      .innerJoin(qProgByLang(_).streamC[Observable](TEST_DB, PROGRAMMERS).column[String]("name")) { (ind, p) ⇒ s"[lang:$ind/person:$p]" }
+    val query = qLang.stream[Observable](TEST_DB, LANGS).column[Int]("index")
+      .innerJoin(qProgByLang(_).stream[Observable](TEST_DB, PROGRAMMERS).column[String]("name")) { (ind, p) ⇒ s"[lang:$ind/person:$p]" }
 
     val s = new Subscriber[String] {
       override def onStart(): Unit = request(1)
@@ -154,7 +113,7 @@ class ObservableSpec extends Specification {
     implicit val cl = client
 
     val qLang = for { q ← "index" $gte 0 $lt 10 } yield q
-    def qProg(left: BasicDBObject) = for { q ← "lang" $eq left.get("index").asInstanceOf[Int] } yield q
+    def qProg(left: DBObject) = for { q ← "lang" $eq left.get("index").asInstanceOf[Int] } yield q
 
     val c = new CountDownLatch(1)
     val sb = new StringBuilder()
@@ -178,7 +137,7 @@ class ObservableSpec extends Specification {
       }
     }
 
-    val query = qLang.streamC[Observable](TEST_DB, LANGS).innerJoinRaw(qProg(_).streamC[Observable](TEST_DB, PROGRAMMERS)) { (l, r) ⇒
+    val query = qLang.stream[Observable](TEST_DB, LANGS).innerJoinRaw(qProg(_).stream[Observable](TEST_DB, PROGRAMMERS)) { (l, r) ⇒
       s"[lang:${l.get("name").asInstanceOf[String]}/person:${r.get("name").asInstanceOf[String]}]"
     }
 

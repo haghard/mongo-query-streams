@@ -238,7 +238,8 @@ class DslQueryBuilderSpec extends Specification with Snippets {
   * Monadic query ${
     snippet {
       import mongo._
-      import dsl._
+      import dsl3._
+      import Query._
       for {
         _ ← "producer_num" $eq 1
         x ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
@@ -251,7 +252,8 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
     import mongo._
     import query._
-    import dsl._
+    import dsl3._
+    import Query._
     import MongoIntegrationEnv.executor
 
     def verifyEq =

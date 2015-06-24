@@ -76,7 +76,8 @@ object MongoIntegrationEnv {
     val programmers = client.getDB(TEST_DB).getCollection(PROGRAMMERS)
 
     for ((v, i) ← langs.zipWithIndex) {
-      langsC.insert(new BasicDBObject("index", i).append("name", v))
+      langsC.insert(new BasicDBObject("index", i).append("name", v)
+        .append("popularity_factor", ThreadLocalRandom.current().nextInt(0, 100)))
     }
 
     for (i ← 1 to 10) {

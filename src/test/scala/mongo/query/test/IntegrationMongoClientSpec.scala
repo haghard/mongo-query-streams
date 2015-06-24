@@ -15,7 +15,8 @@
 package mongo.query.test
 
 import mongo._
-import dsl._
+import dsl3._
+import Query._
 import java.util.Date
 import mongo.query.create
 import scala.collection.mutable.ArrayBuffer
