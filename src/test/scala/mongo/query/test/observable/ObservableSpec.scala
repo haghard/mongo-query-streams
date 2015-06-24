@@ -68,7 +68,7 @@ class ObservableSpec extends Specification {
     5 === responses.get()
   }
 
-  "One to many join through mongoStream with fixed columns" in new MongoStreamsEnviroment {
+  "One to many join through stream with fixed columns" in new MongoStreamsEnviroment {
     initMongo
     val buffer = Buffer.empty[String]
     val Sink = io.fillBuffer(buffer)
@@ -106,7 +106,7 @@ class ObservableSpec extends Specification {
     10 === responses.get()
   }
 
-  "One to many join through mongoStream with raw objects" in new MongoStreamsEnviroment {
+  "One to many join through stream with raw objects" in new MongoStreamsEnviroment {
     initMongo
     val buffer = Buffer.empty[String]
     val Sink = io.fillBuffer(buffer)
