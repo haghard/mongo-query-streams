@@ -14,12 +14,17 @@
 
 package mongo
 
-import java.util.concurrent.ExecutorService
 import mongo.dsl.qb.QueryS
-import org.apache.log4j.Logger
 import scala.reflect.ClassTag
+import org.apache.log4j.Logger
 import scala.language.higherKinds
+import java.util.concurrent.ExecutorService
 
+/**
+ *
+ * Represent abstract way for doing join
+ *
+ */
 package object join {
   import mongo.dsl._
   import mongo.dsl.qb.StatementOp
@@ -29,10 +34,11 @@ package object join {
    * Base abstraction for types in Join domain
    */
   trait DBModule {
-    type Client = com.mongodb.MongoClient
-    type DBRecord = com.mongodb.DBObject
-    type QuerySettings = dsl.QuerySettings
-    type Cursor = com.mongodb.Cursor
+    type DBRecord
+    type QuerySettings
+    type Cursor
+    type Client
+
     type DBStream[A] <: {
       def map[B](f: A ⇒ B): DBStream[B]
       def flatMap[B](f: A ⇒ DBStream[B]): DBStream[B]
@@ -45,7 +51,7 @@ package object join {
    */
   abstract class Joiner[T <: DBModule] {
     protected var log: Logger = null
-    protected var client: T#Client = null
+    protected var client: T#Client = _
     protected var exec: ExecutorService = null
     private val initQ = new com.mongodb.BasicDBObject
     private val init = QuerySettings(initQ)

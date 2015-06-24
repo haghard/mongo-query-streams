@@ -27,20 +27,24 @@ import rx.lang.scala.Producer
 package object observable {
   import qb._
 
-  trait ObservableStream extends DBModule {
+  trait MongoObservableStream extends DBModule {
+    override type Client = com.mongodb.MongoClient
+    override type DBRecord = com.mongodb.DBObject
+    override type QuerySettings = mongo.dsl.QuerySettings
+    override type Cursor = com.mongodb.Cursor
     override type DBStream[Out] = Observable[Out]
   }
 
-  object ObservableStream {
+  object MongoObservableStream {
     trait Fetcher[T] {
       def db: String
       def coll: String
-      def q: ObservableStream#DBRecord
-      def c: ObservableStream#Client
+      def q: MongoObservableStream#DBRecord
+      def c: MongoObservableStream#Client
       def log: Logger
       def subscriber: Subscriber[T]
 
-      lazy val cursor: Option[ObservableStream#Cursor] = (Try {
+      lazy val cursor: Option[MongoObservableStream#Cursor] = (Try {
         Option(c.getDB(db).getCollection(coll).find(q))
       } recover {
         case e: Throwable ⇒
@@ -58,7 +62,7 @@ package object observable {
         }
       }
 
-      def extract(c: ObservableStream#Cursor): T = {
+      def extract(c: MongoObservableStream#Cursor): T = {
         val r = c.next.asInstanceOf[T]
         log.info(s"fetch $r")
         r
@@ -68,35 +72,35 @@ package object observable {
     }
 
     class QueryProducer[T](val subscriber: Subscriber[T], val db: String, val coll: String,
-                           val q: ObservableStream#DBRecord, val c: ObservableStream#Client, val log: Logger) extends Producer {
+                           val q: MongoObservableStream#DBRecord, val c: MongoObservableStream#Client, val log: Logger) extends Producer {
       self: { def fetch(n: Long) } ⇒
       override def request(n: Long) = fetch(n)
     }
 
     trait PKFetcher[T] extends Fetcher[T] {
       def key: String
-      abstract override def extract(c: ObservableStream#Cursor): T =
-        super.extract(c).asInstanceOf[ObservableStream#DBRecord].get(key).asInstanceOf[T]
+      abstract override def extract(c: MongoObservableStream#Cursor): T =
+        super.extract(c).asInstanceOf[MongoObservableStream#DBRecord].get(key).asInstanceOf[T]
     }
 
-    implicit object joiner extends Joiner[ObservableStream] {
+    implicit object joiner extends Joiner[MongoObservableStream] {
       val scheduler = ExecutionContextScheduler(ExecutionContext.fromExecutor(exec))
 
-      private def resource[A](q: ObservableStream#QuerySettings, db: String, coll: String): Observable[A] = {
+      private def resource[A](q: MongoObservableStream#QuerySettings, db: String, coll: String): Observable[A] = {
         log.info(s"[$db - $coll] Query: $q")
         Observable { subscriber: Subscriber[A] ⇒
           subscriber.setProducer(new QueryProducer[A](subscriber, db, coll, q.q, client, log) with Fetcher[A])
         }.subscribeOn(scheduler)
       }
 
-      private def resourceR[A](q: ObservableStream#DBRecord, db: String, coll: String): Observable[A] = {
+      private def resourceR[A](q: MongoObservableStream#DBRecord, db: String, coll: String): Observable[A] = {
         log.info(s"[$db - $coll] Query: $q")
         Observable { subscriber: Subscriber[A] ⇒
           subscriber.setProducer(new QueryProducer[A](subscriber, db, coll, q, client, log) with Fetcher[A])
         }.subscribeOn(scheduler)
       }
 
-      private def typedResource[A](q: ObservableStream#QuerySettings, db: String, coll: String, keyField: String): Observable[A] = {
+      private def typedResource[A](q: MongoObservableStream#QuerySettings, db: String, coll: String, keyField: String): Observable[A] = {
         log.info(s"[$db - $coll] Query: $q")
         Observable { subscriber: Subscriber[A] ⇒
           subscriber.setProducer(new QueryProducer[A](subscriber, db, coll, q.q, client, log) with PKFetcher[A] {
@@ -114,7 +118,7 @@ package object observable {
        * @tparam A
        * @return
        */
-      override def leftField[A](q: QueryFree[ObservableStream#QuerySettings], db: String, coll: String, key: String): ObservableStream#DBStream[A] =
+      override def leftField[A](q: QueryFree[MongoObservableStream#QuerySettings], db: String, coll: String, key: String): MongoObservableStream#DBStream[A] =
         typedResource[A](createQuery(q), db, coll, key)
 
       /**
@@ -124,8 +128,8 @@ package object observable {
        * @param coll
        * @return
        */
-      override def left(q: QueryFree[ObservableStream#QuerySettings], db: String, coll: String): Observable[ObservableStream#DBRecord] =
-        resource[ObservableStream#DBRecord](createQuery(q), db, coll)
+      override def left(q: QueryFree[MongoObservableStream#QuerySettings], db: String, coll: String): Observable[MongoObservableStream#DBRecord] =
+        resource[MongoObservableStream#DBRecord](createQuery(q), db, coll)
 
       /**
        *
@@ -136,7 +140,7 @@ package object observable {
        * @tparam B
        * @return
        */
-      override def relationField[A, B](r: (A) ⇒ QueryFree[ObservableStream#QuerySettings], db: String, coll: String): (A) ⇒ ObservableStream#DBStream[B] =
+      override def relationField[A, B](r: (A) ⇒ QueryFree[MongoObservableStream#QuerySettings], db: String, coll: String): (A) ⇒ MongoObservableStream#DBStream[B] =
         id ⇒
           resource[B](createQuery(r(id)), db, coll)
 
@@ -147,11 +151,11 @@ package object observable {
        * @param coll
        * @return
        */
-      override def relation(r: (ObservableStream#DBRecord) ⇒ QueryFree[ObservableStream#QuerySettings], db: String, coll: String): (ObservableStream#DBRecord) ⇒ Observable[ObservableStream#DBRecord] =
+      override def relation(r: (MongoObservableStream#DBRecord) ⇒ QueryFree[MongoObservableStream#QuerySettings], db: String, coll: String): (MongoObservableStream#DBRecord) ⇒ Observable[MongoObservableStream#DBRecord] =
         id ⇒
-          resource[ObservableStream#DBRecord](createQuery(r(id)), db, coll)
+          resource[MongoObservableStream#DBRecord](createQuery(r(id)), db, coll)
 
-      override def innerJoin[A, B, C](left: Observable[A])(relation: (A) ⇒ Observable[B])(f: (A, B) ⇒ C): ObservableStream#DBStream[C] =
+      override def innerJoin[A, B, C](left: Observable[A])(relation: (A) ⇒ Observable[B])(f: (A, B) ⇒ C): MongoObservableStream#DBStream[C] =
         for {
           id ← left
           rs ← relation(id).map(f(id, _))
@@ -163,8 +167,8 @@ package object observable {
     def column[B](name: String): Observable[B] =
       self.map { record ⇒
         record match {
-          case r: ObservableStream#DBRecord ⇒ r.get(name).asInstanceOf[B]
-          case other                        ⇒ throw new com.mongodb.MongoException(s"DBObject expected but found ${other.getClass.getName}")
+          case r: MongoObservableStream#DBRecord ⇒ r.get(name).asInstanceOf[B]
+          case other                             ⇒ throw new com.mongodb.MongoException(s"DBObject expected but found ${other.getClass.getName}")
         }
       }
 

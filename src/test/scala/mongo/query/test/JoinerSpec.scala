@@ -25,8 +25,8 @@ import scala.concurrent.ExecutionContext
 import scalaz.concurrent.Task
 import scalaz.stream.{ io, Process }
 
-import mongo.join.process.ProcessStream
-import mongo.join.observable.ObservableStream
+import mongo.join.process.MongoProcessStream
+import mongo.join.observable.MongoObservableStream
 
 class JoinerSpec extends Specification {
   import mongo._
@@ -49,7 +49,7 @@ class JoinerSpec extends Specification {
     def qProg(id: Int) = for { q ← "lang" $eq id } yield q
 
     implicit val c = client
-    val joiner = Join[ProcessStream]
+    val joiner = Join[MongoProcessStream]
 
     val query = joiner.joinByPk(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
       s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
@@ -74,7 +74,7 @@ class JoinerSpec extends Specification {
     def qProg(left: DBObject) = for { q ← "lang" $eq left.get("index").asInstanceOf[Int] } yield q
 
     implicit val c = client
-    val joiner = Join[ProcessStream]
+    val joiner = Join[MongoProcessStream]
 
     val query = joiner.join(qLang, LANGS, qProg(_), PROGRAMMERS, TEST_DB) { (l, r) ⇒
       s"Primary-key:${l.get("index")} - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
@@ -104,7 +104,7 @@ class JoinerSpec extends Specification {
     def qProg(id: Int) = for { q ← "lang" $eq id } yield q
 
     implicit val c = client
-    val joiner = Join[ObservableStream]
+    val joiner = Join[MongoObservableStream]
 
     val query = joiner.joinByPk(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
       s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
@@ -149,7 +149,7 @@ class JoinerSpec extends Specification {
     def qProg(left: DBObject) = for { q ← "lang" $eq left.get("index").asInstanceOf[Int] } yield q
 
     implicit val c = client
-    val joiner = Join[ObservableStream]
+    val joiner = Join[MongoObservableStream]
 
     val query = joiner.join(qLang, LANGS, qProg(_), PROGRAMMERS, TEST_DB) { (l, r) ⇒
       s"Primary-key:${l.get("index")} - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"

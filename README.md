@@ -17,7 +17,7 @@ First, you will need to add the Bintray resolver settings to your SBT file:
 ```
 and
  ```scala
-   libraryDependencies += "org.mongo.scalaz"    %% "mongo-query-streams" %  "0.6.5"   
+   libraryDependencies += "org.mongo.scalaz"    %% "mongo-query-streams" %  "0.6.6"   
  ```
 
 Examples
@@ -89,8 +89,9 @@ Using package dsl3 you can easy fetch one/batch/stream
     import rx.lang.scala.{ Observable, Subscriber }
   
     val query = for {
-      _ ← "producer_num" $eq 1
-      q ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
+      _ ← "producer_num" $gt 1 $lt 10
+      _ ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
+      q <- sort("producer_num" -> Descending)
     } yield q
     
     //scalar result
@@ -101,12 +102,13 @@ Using package dsl3 you can easy fetch one/batch/stream
     
     //or stream of BasicDBObject     
     query.stream[MProcess](TEST_DB, LANGS)
+        
+    //or stream of Int from field "f2" using Observable    
+    query.stream[Observable](TEST_DB, LANGS).column[Int]("f2")
     
     //or stream of Strings from field "f" using Process
-    query.streamC[MStream](TEST_DB, LANGS).column[String]("f")    
+    query.sChannel[MStream](TEST_DB, LANGS).column[String]("f")    
     
-    //or stream of Int from field "f2" using Observable    
-    query.streamC[Observable](TEST_DB, LANGS).column[Int]("f2")
     
 ```  
 
@@ -149,7 +151,7 @@ Here's a basic example how to build query, run and get results:
 
 Big win there is that `products` value incapsulates a full interaction lifecycle for with mongo client (get db by name, get collection by name, submit query with preferences, fetch records from cursor, close the cursor). If exception occurs cursor will be closed.
 
-We do support join between 2 collections and 2 different streaming library [RxScala](https://github.com/ReactiveX/RxScala.git) and [ScalazStream](https://github.com/scalaz/scalaz-stream) through single type `mongo.join.Join` which can by parametrized with `ProcessStream` and `ObservableStream`   
+We do support join between 2 collections and 2 different streaming library [RxScala](https://github.com/ReactiveX/RxScala.git) and [ScalazStream](https://github.com/scalaz/scalaz-stream) through single type `mongo.join.Join` which can by parametrized with `MongoProcessStream` and `MongoObservableStream`   
 
 We have two methods for join collections: `joinByPk` and `join`. If you fine with output type from left stream only with key field you should use `joinByPk`. If you aren't, than use `join` for unlimited possibilities in output type.
      
@@ -158,20 +160,24 @@ Here's a example of how you can do joinByPk between collections `LANGS` and `PRO
 ```scala
   import mongo._
   import join._    
-  import dsl3._
+  import dsl._
   import Query._
   import scalaz.stream.Process
-  import mongo.join.process.ProcessStream
+  import mongo.join.process.MongoProcessStream
   
   val buffer = Buffer.empty[String]
   val Sink = scalaz.stream.io.fillBuffer(buffer)
     
-  val qLang = for { q ← "index" $gte 0 $lte 5 } yield q
+  val qLang = for { 
+      _ ← "index" $gte 0 $lte 5
+      q <- sort("index" -> Descending)
+    } yield q
+    
   def qProg(id: Int) = for { q ← "lang" $eq id } yield q
   
   implicit val exec = newFixedThreadPool(2, new NamedThreadFactory("db-worker"))
   implicit val c = client
-  val joiner = Join[ProcessS]
+  val joiner = Join[MongoProcessStream]
       
   val query = joiner.joinByPk(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
     s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
@@ -193,21 +199,25 @@ Join using `rx.lang.scala.Observable`
 
   import mongo._
   import join._
-  import dsl3._
+  import dsl._
   import Query._
   import rx.lang.scala.Subscriber  
   import rx.lang.scala.schedulers.ExecutionContextScheduler
-  import mongo.join.observable.ObservableStream
+  import mongo.join.observable.MongoObservableStream
   
   val buffer = Buffer.empty[String]
   val Sink = io.fillBuffer(buffer)
       
-  val qLang = for { q ← "index" $gte 0 $lte 5 } yield q
+  val qLang = for { 
+    _ ← "index" $gte 0 $lte 5
+    q <- sort("index" -> Descending)
+  } yield q
+  
   def qProg(id: Int) = for { q ← "lang" $eq id } yield q
   
   implicit val exec = newFixedThreadPool(2, new NamedThreadFactory("db-worker"))
   implicit val c = client
-  val joiner = Join[ObservableS]
+  val joiner = Join[MongoObservableStream]
   
   val query = joiner.joinByPk(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
     s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
@@ -242,4 +252,4 @@ Generated files can be found in /target/spec2-reports
 
 Status
 ------
-0.6.5 version
+0.6.6 version
