@@ -87,7 +87,7 @@ licenses += ("Apache-2.0", url("http://www.apache.org/licenses/"))
 
 bintrayOrganization in bintray := Some("haghard")
 
-repository in bintray := "releases" //"snapshots"
+repository in bintray := "snapshots" //"releases"
 
 publishMavenStyle := true
 //publishTo := Some(Resolver.file("file",  new File(localMvnRepo)))
