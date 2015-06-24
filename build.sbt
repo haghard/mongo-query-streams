@@ -6,7 +6,7 @@ organization := "org.mongo.scalaz"
 
 name := "mongo-query-streams"
 
-version := "0.6.6"
+version := "0.6.7-snapshot"
 
 scalaVersion := "2.11.6"
 
