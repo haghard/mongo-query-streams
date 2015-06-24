@@ -19,7 +19,7 @@ import java.util.Date
 import mongo._
 import java.util.Arrays._
 import com.mongodb.BasicDBObject
-import mongo.dsl2._
+import mongo.querydsl._
 import mongo.mqlparser.MqlParser
 import org.specs2.mutable.Specification
 

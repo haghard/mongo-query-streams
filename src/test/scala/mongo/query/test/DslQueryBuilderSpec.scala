@@ -238,12 +238,14 @@ class DslQueryBuilderSpec extends Specification with Snippets {
   * Monadic query ${
     snippet {
       import mongo._
-      import dsl3._
-      import Query._
+      import dsl._
+      import qb._
+
       for {
         _ ← "producer_num" $eq 1
-        x ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
-      } yield x
+        _ ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
+        q ← sort("producer_num" -> Order.Ascending)
+      } yield q
     }
   }
 
@@ -252,8 +254,8 @@ class DslQueryBuilderSpec extends Specification with Snippets {
 
     import mongo._
     import query._
-    import dsl3._
-    import Query._
+    import dsl._
+    import qb._
     import MongoIntegrationEnv.executor
 
     def verifyEq =
@@ -344,8 +346,9 @@ class DslQueryBuilderSpec extends Specification with Snippets {
         new BasicDBObject("$gt", 0).append("$lt", 6).append("$nin", asList(4, 5))).append("producer_num", 1)
       (for {
         _ ← "producer_num" $eq 1
-        x ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
-      } yield x).toDBObject mustEqual expected
+        _ ← "article" $gt 0 $lt 6 $nin Seq(4, 5)
+        q ← sort("producer_num" -> Order.Ascending)
+      } yield q).toDBObject mustEqual expected
     }
   }
 }

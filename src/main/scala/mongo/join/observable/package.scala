@@ -14,7 +14,7 @@
 
 package mongo.join
 
-import mongo.dsl3.Query
+import mongo.dsl.qb
 import org.apache.log4j.Logger
 
 import scala.annotation.tailrec
@@ -25,7 +25,7 @@ import rx.lang.scala.{ Observable, Subscriber }
 import rx.lang.scala.Producer
 
 package object observable {
-  import Query._
+  import qb._
 
   trait ObservableStream extends DBModule {
     override type DBStream[Out] = Observable[Out]

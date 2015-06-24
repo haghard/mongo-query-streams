@@ -29,17 +29,11 @@ import com.mongodb.{ DBObject, DBCursor, BasicDBObject, MongoClient }
 import scala.collection.JavaConversions.mapAsJavaMap
 import scala.collection.JavaConversions.mapAsScalaMap
 
-package object dsl3 { outer ⇒
+package object dsl { outer ⇒
   import scalaz.stream.Process
 
   type MProcess[Out] = Process[Task, Out]
-
   type MStream[Out] = DBChannel[MongoClient, Out]
-
-  object FetchMode extends Enumeration {
-    type Type = Value
-    val One, Batch = Value
-  }
 
   sealed trait LogLevel
   case object ErrorLevel extends LogLevel
@@ -52,7 +46,7 @@ package object dsl3 { outer ⇒
 
   case class QuerySettings(q: DBObject, sort: Option[DBObject] = None, limit: Option[Int] = None, skip: Option[Int] = None)
 
-  object Query {
+  object qb {
     import shapeless._
     import shapeless.CNil
     import CoyonedaShapless._
@@ -93,8 +87,8 @@ package object dsl3 { outer ⇒
 
     type QueryS[T] = scalaz.State[QuerySettings, T]
 
-    object QueryInterpreter extends (Query.StatementOp ~> QueryS) {
-      def apply[T](op: Query.StatementOp[T]): QueryS[T] = op match {
+    object QueryInterpreter extends (qb.StatementOp ~> QueryS) {
+      def apply[T](op: qb.StatementOp[T]): QueryS[T] = op match {
         case EqOp(q) ⇒
           scalaz.State { (in: QuerySettings) ⇒
             (in.copy(q = new BasicDBObject(mapAsJavaMap(mapAsScalaMap(in.q.toMap) ++ mapAsScalaMap(q.toMap)))), in)
@@ -135,7 +129,7 @@ package object dsl3 { outer ⇒
     case class ReadOne(client: MongoClient, qs: QuerySettings, db: String, coll: String) extends MongoInteractionOp[NonEmptyResult]
     case class ReadBatch(client: MongoClient, qs: QuerySettings, db: String, coll: String) extends MongoInteractionOp[NonEmptyResult]
 
-    type InteractionApp[T] = MongoInteractionOp[T] :+: Log[T] :+: Query.FreeApp[T] :+: CNil
+    type InteractionApp[T] = MongoInteractionOp[T] :+: Log[T] :+: qb.FreeApp[T] :+: CNil
     type CoyoApp[T] = Coyoneda[InteractionApp, T]
     type FreeApp[T] = scalaz.Free.FreeC[InteractionApp, T]
 
@@ -149,7 +143,7 @@ package object dsl3 { outer ⇒
     def readBatch(client: MongoClient, q: QuerySettings, db: String, coll: String): FreeApp[NonEmptyResult] =
       lift(ReadBatch(client, q, db, coll))
 
-    def createQuery(rq: Query.QueryFree[QuerySettings]): FreeApp[QuerySettings] = lift(Query.query(rq))
+    def createQuery(rq: qb.QueryFree[QuerySettings]): FreeApp[QuerySettings] = lift(qb.query(rq))
 
     object LogInteraction {
       def debug(msg: String) = Copoyo[InteractionApp](LogMsg(DebugLevel, msg))
@@ -158,7 +152,7 @@ package object dsl3 { outer ⇒
       def error(msg: String) = Copoyo[InteractionApp](LogMsg(ErrorLevel, msg))
     }
 
-    def program(rq: Query.QueryFree[QuerySettings], client: MongoClient,
+    def program(rq: qb.QueryFree[QuerySettings], client: MongoClient,
                 db: String, coll: String, mode: FetchMode.Type): FreeApp[NonEmptyResult] =
       for {
         qs ← createQuery(rq)
@@ -177,8 +171,8 @@ package object dsl3 { outer ⇒
       }
     }
 
-    object QueryTrans extends (Query.StatementOp ~> Id) {
-      override def apply[A](fa: Query.StatementOp[A]): Id[A] = fa match {
+    object QueryTrans extends (qb.StatementOp ~> Id) {
+      override def apply[A](fa: qb.StatementOp[A]): Id[A] = fa match {
         case other ⇒ throw new Exception("This is Davy John locker")
       }
     }
@@ -215,9 +209,9 @@ package object dsl3 { outer ⇒
       }
     }
 
-    val qInterpreter: Query.QueryApp ~> Id = QueryTrans ||: ApacheLog4jTransformation
-    val qInterpreterCoyo: Query.CoyoApp ~> Id = liftCoyoLeft(qInterpreter)
-    val qInterpreterFree: Query.FreeApp ~> Id = liftFree(qInterpreterCoyo)
+    val qInterpreter: qb.QueryApp ~> Id = QueryTrans ||: ApacheLog4jTransformation
+    val qInterpreterCoyo: qb.CoyoApp ~> Id = liftCoyoLeft(qInterpreter)
+    val qInterpreterFree: qb.FreeApp ~> Id = liftFree(qInterpreterCoyo)
 
     val intInterpreter: Interaction.InteractionApp ~> Id = BatchQueryTransformation ||: ApacheLog4jTransformation ||: qInterpreterFree
     val intInterpreterCoyo: Interaction.CoyoApp ~> Id = liftCoyoLeft(intInterpreter)
@@ -232,7 +226,7 @@ package object dsl3 { outer ⇒
       def create[T](q: QuerySettings, db: String, coll: String)(implicit pool: ExecutorService): M[T]
     }
 
-    private[dsl3] def mongoResource[T](qs: QuerySettings, client: MongoClient, db: String, collection: String, log: org.apache.log4j.Logger)(implicit pool: ExecutorService): Process[Task, T] = {
+    private[dsl] def mongoResource[T](qs: QuerySettings, client: MongoClient, db: String, collection: String, log: org.apache.log4j.Logger)(implicit pool: ExecutorService): Process[Task, T] = {
       io.resource(Task.delay {
         val coll = client.getDB(db).getCollection(collection)
         val cursor = coll.find(qs.q)
@@ -309,10 +303,10 @@ package object dsl3 { outer ⇒
     }
   }
 
-  implicit class ProgramSyntax(val self: Query.QueryFree[QuerySettings]) extends AnyVal {
+  implicit class ProgramSyntax(val self: qb.QueryFree[QuerySettings]) extends AnyVal {
     import outer.Interaction._
     import scalaz.Free.runFC
-    import mongo.dsl3.Query._
+    import mongo.dsl.qb._
 
     private def init = QuerySettings(new BasicDBObject)
 
@@ -353,7 +347,7 @@ package object dsl3 { outer ⇒
         .foldMap(Trampolined compose intInterpreterCoyo).run)(pool)
 
     /**
-     * Works only with [[mongo.dsl3.MStream]] type, allows you to do joins for processes
+     * Works only with [[mongo.dsl.MStream]] type, allows you to do joins for processes
      *
      *
      * @param db
@@ -364,10 +358,10 @@ package object dsl3 { outer ⇒
      */
     def sChannel[M[_]: ChannelStreamer](db: String, coll: String)(implicit pool: ExecutorService): M[DBObject] =
       implicitly[ChannelStreamer[M]].create(
-        runFC[Query.StatementOp, QueryS, QuerySettings](self)(Query.QueryInterpreter).run(outer.Query.init)._1, db, coll)
+        runFC[qb.StatementOp, QueryS, QuerySettings](self)(qb.QueryInterpreter).run(outer.qb.init)._1, db, coll)
 
     /**
-     * Works with [[mongo.dsl3.MProcess]], [[rx.lang.scala.Observable]] types
+     * Works with [[mongo.dsl.MProcess]], [[rx.lang.scala.Observable]] types
      * @param db
      * @param coll
      * @param pool
@@ -379,7 +373,7 @@ package object dsl3 { outer ⇒
     //val m = implicitly[scalaz.Monad[M]]
     def stream[M[_]: Streamer](db: String, coll: String)(implicit pool: ExecutorService, client: MongoClient): M[DBObject] = {
       implicitly[Streamer[M]].create(
-        (runFC[Query.StatementOp, QueryS, QuerySettings](self)(Query.QueryInterpreter)).run(outer.Query.init)._1, client, db, coll)
+        (runFC[qb.StatementOp, QueryS, QuerySettings](self)(qb.QueryInterpreter)).run(outer.qb.init)._1, client, db, coll)
     }
   }
 }

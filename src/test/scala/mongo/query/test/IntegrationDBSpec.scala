@@ -17,7 +17,7 @@ package mongo.query.test
 import mongo.query.create
 
 import mongo._
-import dsl2._
+import querydsl._
 
 import com.mongodb.DBObject
 import org.specs2.mutable._

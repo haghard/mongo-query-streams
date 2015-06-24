@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package mongo.dsl3
+package mongo.dsl
 
 import shapeless.ops.coproduct.Inject
 import shapeless.{ :+:, CNil, Coproduct, Inl, Inr }

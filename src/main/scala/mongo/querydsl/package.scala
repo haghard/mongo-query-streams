@@ -16,7 +16,7 @@ package mongo
 
 import java.util.Date
 
-package object dsl2 {
+package object querydsl {
 
   type Effect = StringBuilder ⇒ Unit
   type Par = (String, Action)
@@ -25,13 +25,13 @@ package object dsl2 {
   object Action {
     import scala.xml.Utility.{ escape ⇒ esc }
 
-    private[dsl2] def s(s: String): Action = Action(sb ⇒ sb append s)
+    private[querydsl] def s(s: String): Action = Action(sb ⇒ sb append s)
 
-    private[dsl2] def value[T](s: T): Action = Action(sb ⇒ sb append s)
+    private[querydsl] def value[T](s: T): Action = Action(sb ⇒ sb append s)
 
-    private[dsl2] def escape(s: String): Action = Action(sb ⇒ sb append esc(s))
+    private[querydsl] def escape(s: String): Action = Action(sb ⇒ sb append esc(s))
 
-    private[dsl2] def intersperse(delim: Action)(as: TraversableOnce[Action]) = Action { sb ⇒
+    private[querydsl] def intersperse(delim: Action)(as: TraversableOnce[Action]) = Action { sb ⇒
       var between = false
       as foreach { a ⇒
         if (between) {
@@ -44,16 +44,16 @@ package object dsl2 {
       }
     }
 
-    private[dsl2] def entry(key: String, value: Action): Action =
+    private[querydsl] def entry(key: String, value: Action): Action =
       literal(key) ++ s(" : ") ++ value
 
-    private[dsl2] def obj(entries: TraversableOnce[Par]): Action =
+    private[querydsl] def obj(entries: TraversableOnce[Par]): Action =
       s("{ ") ++ intersperse(s(", "))(entries.map(p ⇒ entry(p._1, p._2))) ++ s(" }")
 
-    private[dsl2] def list(values: TraversableOnce[Action]): Action =
+    private[querydsl] def list(values: TraversableOnce[Action]): Action =
       s("[") ++ intersperse(s(", "))(values) ++ s("]")
 
-    private[dsl2] def nestedMap(entries: TraversableOnce[KVS]): Action = Action { sb ⇒
+    private[querydsl] def nestedMap(entries: TraversableOnce[KVS]): Action = Action { sb ⇒
       var start = true
       entries foreach { en ⇒
         if (start) { start = false; s("{ ")(sb) }

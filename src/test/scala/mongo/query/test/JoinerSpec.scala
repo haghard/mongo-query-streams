@@ -31,8 +31,8 @@ import mongo.join.observable.ObservableStream
 class JoinerSpec extends Specification {
   import mongo._
   import join._
-  import dsl3._
-  import Query._
+  import dsl._
+  import qb._
   import MongoIntegrationEnv._
 
   "Build joinByPk with Process" in new MongoStreamsEnviroment {
@@ -41,7 +41,11 @@ class JoinerSpec extends Specification {
     val buffer = Buffer.empty[String]
     val Sink = io.fillBuffer(buffer)
 
-    val qLang = for { q ← "index" $gte 0 $lte 5 } yield q
+    val qLang = for {
+      _ ← "index" $gte 0 $lte 5
+      q ← limit(5)
+    } yield q
+
     def qProg(id: Int) = for { q ← "lang" $eq id } yield q
 
     implicit val c = client

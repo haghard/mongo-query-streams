@@ -16,7 +16,7 @@ package mongo.join
 
 package object process {
   import mongo.query.DBChannel
-  import mongo.dsl3.Query.QueryFree
+  import mongo.dsl.qb.QueryFree
 
   trait ProcessStream extends DBModule {
     override type DBStream[Out] = DBChannel[Client, Out]
@@ -29,13 +29,20 @@ package object process {
     val P = scalaz.stream.Process
 
     implicit object joiner extends Joiner[ProcessStream] {
-      private def resource[T](q: ProcessStream#QuerySettings, client: ProcessStream#Client, db: String, coll: String): Process[Task, T] = {
-        log.info(s"[$db - $coll] query: $q")
-        io.resource(Task.delay(client.getDB(db).getCollection(coll).find(q.q)))(c ⇒ Task.delay(c.close)) { c ⇒
+      private def resource[T](qs: ProcessStream#QuerySettings, client: ProcessStream#Client, db: String, collection: String): Process[Task, T] = {
+        io.resource(Task.delay {
+          val coll = client.getDB(db).getCollection(collection)
+          val cursor = coll.find(qs.q)
+          qs.sort.foreach(cursor.sort(_))
+          qs.skip.foreach(cursor.skip(_))
+          qs.limit.foreach(cursor.limit(_))
+          log.debug(s"Query-settings: Sort:[ ${qs.sort} ] Skip:[ ${qs.skip} ] Limit:[ ${qs.limit} ] Query:[ ${qs.q} ]")
+          cursor
+        })(c ⇒ Task.delay(c.close)) { c ⇒
           Task {
             if (c.hasNext) {
               val r = c.next
-              log.info(s"fetch $r")
+              log.debug(s"fetch $r")
               r.asInstanceOf[T]
             } else throw Cause.Terminated(Cause.End)
           }(exec)

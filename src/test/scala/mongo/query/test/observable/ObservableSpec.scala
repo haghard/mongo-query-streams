@@ -30,8 +30,8 @@ import scalaz.stream.io
 class ObservableSpec extends Specification {
   import mongo._
   import mongo.join.observable._
-  import dsl3._
-  import Query._
+  import dsl._
+  import qb._
   import MongoIntegrationEnv._
 
   "Build query and perform streaming using Observable" in new MongoStreamsEnviroment {

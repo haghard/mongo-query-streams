@@ -62,6 +62,11 @@ package object mongo {
     val Descending = Value(-1)
   }
 
+  object FetchMode extends Enumeration {
+    type Type = Value
+    val One, Batch = Value
+  }
+
   private[mongo] trait QueryDsl extends scalaz.syntax.Ops[ComposableQueryFragment] {
 
     def field: String

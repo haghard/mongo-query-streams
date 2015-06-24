@@ -43,8 +43,8 @@ trait MongoStreamsEnviroment extends org.specs2.mutable.After {
 
 class IntegrationMongoStreamsSpec extends Specification {
   import mongo._
-  import dsl3._
-  import Query._
+  import dsl._
+  import qb._
   import Interaction._
   import mongo.Order._
   import MongoIntegrationEnv._

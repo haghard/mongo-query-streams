@@ -15,15 +15,15 @@
 package mongo
 
 import java.util.concurrent.ExecutorService
-import mongo.dsl3.Query.QueryS
+import mongo.dsl.qb.QueryS
 import org.apache.log4j.Logger
 import scala.reflect.ClassTag
 import scala.language.higherKinds
 
 package object join {
-  import mongo.dsl3._
-  import mongo.dsl3.Query.StatementOp
-  import mongo.dsl3.Query.QueryFree
+  import mongo.dsl._
+  import mongo.dsl.qb.StatementOp
+  import mongo.dsl.qb.QueryFree
 
   /**
    * Base abstraction for types in Join domain
@@ -31,7 +31,7 @@ package object join {
   trait DBModule {
     type Client = com.mongodb.MongoClient
     type DBRecord = com.mongodb.DBObject
-    type QuerySettings = dsl3.QuerySettings
+    type QuerySettings = dsl.QuerySettings
     type Cursor = com.mongodb.Cursor
     type DBStream[A] <: {
       def map[B](f: A ⇒ B): DBStream[B]
@@ -70,17 +70,7 @@ package object join {
      * @return
      */
     protected def createQuery(q: QueryFree[T#QuerySettings]): QuerySettings =
-      scalaz.Free.runFC[StatementOp, QueryS, T#QuerySettings](q)(Query.QueryInterpreter).run(init)._1
-
-    /**
-     *
-     *
-     * @return
-     */
-    /*
-    protected def createQueryR(q: QueryFree[T#DBRecord]): DBObject =
-      scalaz.Free.runFC[StatementOp, QueryDB, T#DBRecord](q)(Query.QueryInterpreter).run(initQ)._1
-    */
+      scalaz.Free.runFC[StatementOp, QueryS, T#QuerySettings](q)(qb.QueryInterpreter).run(init)._1
 
     /**
      *
@@ -91,7 +81,7 @@ package object join {
      * @tparam A
      * @return
      */
-    def leftField[A](q: Query.QueryFree[T#QuerySettings], db: String, coll: String, keyField: String): T#DBStream[A]
+    def leftField[A](q: qb.QueryFree[T#QuerySettings], db: String, coll: String, keyField: String): T#DBStream[A]
 
     /**
      *
@@ -100,7 +90,7 @@ package object join {
      * @param coll
      * @return
      */
-    def left(q: Query.QueryFree[T#QuerySettings], db: String, coll: String): T#DBStream[T#DBRecord]
+    def left(q: qb.QueryFree[T#QuerySettings], db: String, coll: String): T#DBStream[T#DBRecord]
 
     /**
      *
@@ -111,7 +101,7 @@ package object join {
      * @tparam B
      * @return
      */
-    def relationField[A, B](r: A ⇒ Query.QueryFree[T#QuerySettings], db: String, collectionName: String): A ⇒ T#DBStream[B]
+    def relationField[A, B](r: A ⇒ qb.QueryFree[T#QuerySettings], db: String, collectionName: String): A ⇒ T#DBStream[B]
 
     /**
      *
@@ -120,7 +110,7 @@ package object join {
      * @param collectionName
      * @return
      */
-    def relation(r: T#DBRecord ⇒ Query.QueryFree[T#QuerySettings], db: String, collectionName: String): T#DBRecord ⇒ T#DBStream[T#DBRecord]
+    def relation(r: T#DBRecord ⇒ qb.QueryFree[T#QuerySettings], db: String, collectionName: String): T#DBRecord ⇒ T#DBStream[T#DBRecord]
 
     /**
      *
