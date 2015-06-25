@@ -8,7 +8,7 @@ name := "mongo-query-streams"
 
 version := "0.6.7-snapshot"
 
-scalaVersion := "2.11.6"
+scalaVersion := "2.11.7"
 
 parallelExecution := false
 parallelExecution in Test := false
