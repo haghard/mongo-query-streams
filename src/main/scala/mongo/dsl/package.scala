@@ -261,7 +261,7 @@ package object dsl { outer ⇒
       }
 
       implicit object RxStreamer extends Streamer[Observable] {
-        import com.mongodb._
+        import com.mongodb.{MongoClient, DBCursor}
         override def create[T](qs: QuerySettings, client: MongoClient, db: String, collection: String)(implicit pool: ExecutorService): Observable[T] = {
           Observable { subscriber: Subscriber[T] ⇒
             subscriber.setProducer(new Producer() {
@@ -282,6 +282,7 @@ package object dsl { outer ⇒
               }).get
 
               @tailrec def go(n: Long): Unit = {
+                logger.info(s"request $n")
                 if (n > 0) {
                   if (cursor.find(_.hasNext).isDefined) {
                     val r = cursor.get.next().asInstanceOf[T]
@@ -292,10 +293,7 @@ package object dsl { outer ⇒
                 }
               }
 
-              override def request(n: Long): Unit = {
-                logger.info(s"request $n")
-                go(n)
-              }
+              override def request(n: Long): Unit = go(n)
             })
           }.subscribeOn(ExecutionContextScheduler(ExecutionContext.fromExecutor(pool)))
         }
