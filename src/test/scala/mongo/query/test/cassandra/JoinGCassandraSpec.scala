@@ -59,7 +59,7 @@ class JoinGCassandraSpec extends WordSpecLike with Matchers with CassandraEnviro
         _ ← row to Sink
       } yield ())
         .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); P.halt }
-        .onComplete { P.eval(Task.delay(logger.debug("Interaction has been completed"))) }
+        .onComplete { P.eval(Task.delay { client.close(); logger.debug("Interaction has been completed") }) }
         .runLog.run
 
       logger.info("****Result:" + buffer)
@@ -99,6 +99,7 @@ class JoinGCassandraSpec extends WordSpecLike with Matchers with CassandraEnviro
         }
         override def onCompleted() = {
           logger.info("Interaction has been completed")
+          client.close()
           count.countDown()
         }
       }
