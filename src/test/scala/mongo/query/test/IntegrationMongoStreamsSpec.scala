@@ -14,17 +14,23 @@
 
 package mongo.query.test
 
+import java.net.InetSocketAddress
+
 import com.mongodb.{ DBObject, MongoClient }
 import de.bwaldvogel.mongo.MongoServer
 import mongo.query.test.MongoIntegrationEnv._
-import org.specs2.mutable.Specification
+import mongo.query.test.cassandra.CassandraServerHelper
+import org.scalatest.{ Suite, BeforeAndAfterAll }
+import org.specs2.mutable.{ After, Specification }
+import scala.annotation.tailrec
 import scala.collection.mutable.Buffer
+import scala.util.{ Failure, Success, Try }
 import scalaz.\/-
 import scalaz.concurrent.Task
 import scalaz.stream.io
 
-trait MongoStreamsEnviroment extends org.specs2.mutable.After {
-  val logger = org.apache.log4j.Logger.getLogger("MongoStreams-Enviroment")
+trait MongoEnviromentLifecycle extends After {
+  val logger = org.apache.log4j.Logger.getLogger("MongoStreams-Mongo-Enviroment")
   var client: MongoClient = _
   var server: MongoServer = _
 
@@ -35,7 +41,7 @@ trait MongoStreamsEnviroment extends org.specs2.mutable.After {
   }
 
   override def after = {
-    logger.info("Close all resources")
+    logger.info("Close all mongo resources")
     client.close
     server.shutdown
   }
@@ -51,7 +57,7 @@ class IntegrationMongoStreamsSpec extends Specification {
 
   val P = scalaz.stream.Process
 
-  "Build query and perform findOne" in new MongoStreamsEnviroment {
+  "Build query and perform findOne" in new MongoEnviromentLifecycle {
     initMongo
 
     val p = for { q ← "index" $eq 0 } yield q
@@ -63,7 +69,7 @@ class IntegrationMongoStreamsSpec extends Specification {
     r.get("index") === 0
   }
 
-  "Build query and perform find batch" in new MongoStreamsEnviroment {
+  "Build query and perform find batch" in new MongoEnviromentLifecycle {
     initMongo
 
     val p = for {
@@ -81,7 +87,7 @@ class IntegrationMongoStreamsSpec extends Specification {
     r.get(BatchPrefix).asInstanceOf[java.util.List[DBObject]].size() === 3
   }
 
-  "Build query and perform streaming using scalaz.Process" in new MongoStreamsEnviroment {
+  "Build query and perform streaming using scalaz.Process" in new MongoEnviromentLifecycle {
     initMongo
     implicit val cl = client
     val q = for { ex ← "index" $gte 0 $lt 5 } yield ex
@@ -94,7 +100,7 @@ class IntegrationMongoStreamsSpec extends Specification {
     langs.size === buf.size
   }
 
-  "Build query and perform streaming using mongoStream" in new MongoStreamsEnviroment {
+  "Build query and perform streaming using mongoStream" in new MongoEnviromentLifecycle {
     initMongo
     val field = "index"
 
@@ -118,7 +124,7 @@ class IntegrationMongoStreamsSpec extends Specification {
     langs.size === buffer.size
   }
 
-  "One to many join through sChannel with fixed columns" in new MongoStreamsEnviroment {
+  "One to many join through sChannel with fixed columns" in new MongoEnviromentLifecycle {
     initMongo
     val buffer = Buffer.empty[String]
     val Sink = io.fillBuffer(buffer)
@@ -149,7 +155,7 @@ class IntegrationMongoStreamsSpec extends Specification {
     buffer.size === 10
   }
 
-  "One to many join through sChannel with raw objects" in new MongoStreamsEnviroment {
+  "One to many join through sChannel with raw objects" in new MongoEnviromentLifecycle {
     initMongo
     val buffer = Buffer.empty[String]
     val Sink = io.fillBuffer(buffer)

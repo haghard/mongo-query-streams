@@ -5,3 +5,5 @@ project/project/target/
 
 # IntelliJ
 .idea/
+
+logs/mongo-action-tests.txt

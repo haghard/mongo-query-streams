@@ -14,6 +14,10 @@
 
 package mongo
 
+import cassandra.{ CassandraParamValue, CassandraQuerySettings }
+
+import scala.reflect.ClassTag
+import scala.runtime.ScalaRunTime
 import scala.util.Try
 import mongo.query.DBChannel
 import scalaz.concurrent.Task
@@ -44,7 +48,33 @@ package object dsl { outer ⇒
   sealed trait Log[A]
   case class LogMsg(level: LogLevel, msg: String) extends Log[Unit]
 
-  case class QuerySettings(q: DBObject, sort: Option[DBObject] = None, limit: Option[Int] = None, skip: Option[Int] = None)
+  case class MongoQuerySettings(q: DBObject, sort: Option[DBObject] = None,
+                                limit: Option[Int] = None, skip: Option[Int] = None)
+
+  class MyTag[A](val t: ClassTag[A]) extends ClassTag[A] {
+    override def runtimeClass = t.runtimeClass
+    override def unapply(x: Any): Option[A] = {
+      if (t.runtimeClass.isPrimitive) {
+        val ok = x match {
+          case _: java.lang.Integer   ⇒ runtimeClass == java.lang.Integer.TYPE
+          //case _: java.lang.Double    => runtimeClass == java.lang.Double.TYPE
+          case _: java.lang.Double    ⇒ t == ClassTag.Double // equivalent
+          case _: java.lang.Long      ⇒ runtimeClass == java.lang.Long.TYPE
+          case _: java.lang.Character ⇒ runtimeClass == java.lang.Character.TYPE
+          case _: java.lang.Float     ⇒ runtimeClass == java.lang.Float.TYPE
+          case _: java.lang.Byte      ⇒ runtimeClass == java.lang.Byte.TYPE
+          case _: java.lang.Short     ⇒ runtimeClass == java.lang.Short.TYPE
+          case _: java.lang.Boolean   ⇒ runtimeClass == java.lang.Boolean.TYPE
+          case _: Unit                ⇒ runtimeClass == java.lang.Void.TYPE
+          case _                      ⇒ false // super.unapply(x).isDefined
+        }
+        if (ok) Some(x.asInstanceOf[A]) else None
+      } else if (x == null) {
+        // let them collect nulls, for example
+        if (t == ClassTag.Null) Some(null.asInstanceOf[A]) else None
+      } else super.unapply(x)
+    }
+  }
 
   object qb {
     import shapeless._
@@ -54,11 +84,13 @@ package object dsl { outer ⇒
     import scalaz.Free.runFC
 
     sealed trait StatementOp[T]
-    case class EqOp(q: DBObject) extends StatementOp[QuerySettings]
-    case class ChainOp(q: DBObject) extends StatementOp[QuerySettings]
-    case class Sort(q: DBObject) extends StatementOp[QuerySettings]
-    case class Skip(n: Int) extends StatementOp[QuerySettings]
-    case class Limit(n: Int) extends StatementOp[QuerySettings]
+    case class EqOp(q: DBObject) extends StatementOp[MongoQuerySettings]
+    case class ChainOp(q: DBObject) extends StatementOp[MongoQuerySettings]
+    case class Sort(q: DBObject) extends StatementOp[MongoQuerySettings]
+    case class Skip(n: Int) extends StatementOp[MongoQuerySettings]
+    case class Limit(n: Int) extends StatementOp[MongoQuerySettings]
+    case class CassandraSelect(q: String) extends StatementOp[cassandra.CassandraQuerySettings]
+    case class CassandraParam(name: String, v: AnyRef, c: Class[_]) extends StatementOp[cassandra.CassandraQuerySettings]
 
     type QueryFree[A] = scalaz.Free.FreeC[StatementOp, A]
 
@@ -70,43 +102,61 @@ package object dsl { outer ⇒
       def debug(msg: String) = Copoyo[QueryApp](LogMsg(DebugLevel, msg))
     }
 
-    val init = QuerySettings(new BasicDBObject)
+    val init = MongoQuerySettings(new BasicDBObject)
 
-    implicit def f2FreeM(q: mongo.EqQueryFragment): QueryFree[QuerySettings] = liftFC(EqOp(q.q))
-    implicit def c2FreeM(q: mongo.ComposableQueryFragment): QueryFree[QuerySettings] = liftFC(ChainOp(q.q))
-    implicit def sort2FreeM(kv: (String, mongo.Order.Value)): QueryFree[QuerySettings] = liftFC(Sort(new BasicDBObject(kv._1, kv._2.id)))
+    implicit def f2FreeM(q: mongo.EqQueryFragment): QueryFree[MongoQuerySettings] = liftFC(EqOp(q.q))
+    implicit def c2FreeM(q: mongo.ComposableQueryFragment): QueryFree[MongoQuerySettings] = liftFC(ChainOp(q.q))
+    implicit def sort2FreeM(kv: (String, mongo.Order.Value)): QueryFree[MongoQuerySettings] = liftFC(Sort(new BasicDBObject(kv._1, kv._2.id)))
 
-    def sort(h: (String, Order.Value), t: (String, Order.Value)*): QueryFree[QuerySettings] = {
+    implicit def qFreeM(select: String): QueryFree[cassandra.CassandraQuerySettings] = liftFC(CassandraSelect(select))
+
+    /**
+     * @tparam T something from java.lang. for correct work with cassandra driver
+     */
+    def cParam[T <: AnyRef](name: String, v: T)(implicit t: ClassTag[T]): QueryFree[cassandra.CassandraQuerySettings] =
+      liftFC(CassandraParam(name, v, t.runtimeClass))
+
+    def sort(h: (String, Order.Value), t: (String, Order.Value)*): QueryFree[MongoQuerySettings] = {
       liftFC(Sort(t.toList.foldLeft(new BasicDBObject(h._1, h._2.id)) { (acc, c) ⇒
         acc.append(c._1, c._2.id)
       }))
     }
 
-    def skip(n: Int): QueryFree[QuerySettings] = liftFC(Skip(n))
-    def limit(n: Int): QueryFree[QuerySettings] = liftFC(Limit(n))
+    def skip(n: Int): QueryFree[MongoQuerySettings] = liftFC(Skip(n))
+    def limit(n: Int): QueryFree[MongoQuerySettings] = liftFC(Limit(n))
 
-    type QueryS[T] = scalaz.State[QuerySettings, T]
+    type QueryM[T] = scalaz.State[MongoQuerySettings, T]
+    type QueryC[T] = scalaz.State[CassandraQuerySettings, T]
 
-    object QueryInterpreter extends (qb.StatementOp ~> QueryS) {
-      def apply[T](op: qb.StatementOp[T]): QueryS[T] = op match {
-        case EqOp(q) ⇒
-          scalaz.State { (in: QuerySettings) ⇒
-            (in.copy(q = new BasicDBObject(mapAsJavaMap(mapAsScalaMap(in.q.toMap) ++ mapAsScalaMap(q.toMap)))), in)
-          }
-        case ChainOp(q) ⇒
-          scalaz.State { (in: QuerySettings) ⇒
-            (in.copy(q = new BasicDBObject(mapAsJavaMap(mapAsScalaMap(in.q.toMap) ++ mapAsScalaMap(q.toMap)))), in)
-          }
-        case Sort(q)  ⇒ scalaz.State { (in: QuerySettings) ⇒ (in.copy(sort = Option(q)), in) }
-        case Skip(n)  ⇒ scalaz.State { (in: QuerySettings) ⇒ (in.copy(skip = Option(n)), in) }
-        case Limit(n) ⇒ scalaz.State { (in: QuerySettings) ⇒ (in.copy(limit = Option(n)), in) }
+    object CassandraQueryInterpreter extends (qb.StatementOp ~> QueryC) {
+      override def apply[A](fa: qb.StatementOp[A]): QueryC[A] = fa match {
+        case CassandraSelect(select) ⇒
+          scalaz.State { (in: CassandraQuerySettings) ⇒ (in.copy(select), in) }
+        case CassandraParam(name, v, c) ⇒
+          scalaz.State { (in: CassandraQuerySettings) ⇒ (in.copy(v = Some(CassandraParamValue(name, v, c))), in) }
       }
     }
 
-    def query(rq: QueryFree[QuerySettings]): FreeApp[QuerySettings] =
+    object MongoQueryInterpreter extends (qb.StatementOp ~> QueryM) {
+      def apply[T](op: qb.StatementOp[T]): QueryM[T] = op match {
+        case EqOp(q) ⇒
+          scalaz.State { (in: MongoQuerySettings) ⇒
+            (in.copy(q = new BasicDBObject(mapAsJavaMap(mapAsScalaMap(in.q.toMap) ++ mapAsScalaMap(q.toMap)))), in)
+          }
+        case ChainOp(q) ⇒
+          scalaz.State { (in: MongoQuerySettings) ⇒
+            (in.copy(q = new BasicDBObject(mapAsJavaMap(mapAsScalaMap(in.q.toMap) ++ mapAsScalaMap(q.toMap)))), in)
+          }
+        case Sort(q)  ⇒ scalaz.State { (in: MongoQuerySettings) ⇒ (in.copy(sort = Option(q)), in) }
+        case Skip(n)  ⇒ scalaz.State { (in: MongoQuerySettings) ⇒ (in.copy(skip = Option(n)), in) }
+        case Limit(n) ⇒ scalaz.State { (in: MongoQuerySettings) ⇒ (in.copy(limit = Option(n)), in) }
+      }
+    }
+
+    def query(rq: QueryFree[MongoQuerySettings]): FreeApp[MongoQuerySettings] =
       for {
         _ ← LogQuery.debug("Construct query")
-        q = (runFC[StatementOp, QueryS, QuerySettings](rq)(QueryInterpreter)).run(init)._1
+        q = (runFC[StatementOp, QueryM, MongoQuerySettings](rq)(MongoQueryInterpreter)).run(init)._1
       } yield q
   }
 
@@ -126,8 +176,8 @@ package object dsl { outer ⇒
     type NonEmptyResult = DBError \/ DBObject
 
     sealed trait MongoInteractionOp[T]
-    case class ReadOne(client: MongoClient, qs: QuerySettings, db: String, coll: String) extends MongoInteractionOp[NonEmptyResult]
-    case class ReadBatch(client: MongoClient, qs: QuerySettings, db: String, coll: String) extends MongoInteractionOp[NonEmptyResult]
+    case class ReadOne(client: MongoClient, qs: MongoQuerySettings, db: String, coll: String) extends MongoInteractionOp[NonEmptyResult]
+    case class ReadBatch(client: MongoClient, qs: MongoQuerySettings, db: String, coll: String) extends MongoInteractionOp[NonEmptyResult]
 
     type InteractionApp[T] = MongoInteractionOp[T] :+: Log[T] :+: qb.FreeApp[T] :+: CNil
     type CoyoApp[T] = Coyoneda[InteractionApp, T]
@@ -137,13 +187,13 @@ package object dsl { outer ⇒
 
     def lift[F[_], A](a: F[A])(implicit inj: Inject[InteractionApp[A], F[A]]): FreeApp[A] = Copoyo[InteractionApp](a)
 
-    def readOne(client: MongoClient, q: QuerySettings, db: String, coll: String): FreeApp[NonEmptyResult] =
+    def readOne(client: MongoClient, q: MongoQuerySettings, db: String, coll: String): FreeApp[NonEmptyResult] =
       lift(ReadOne(client, q, db, coll))
 
-    def readBatch(client: MongoClient, q: QuerySettings, db: String, coll: String): FreeApp[NonEmptyResult] =
+    def readBatch(client: MongoClient, q: MongoQuerySettings, db: String, coll: String): FreeApp[NonEmptyResult] =
       lift(ReadBatch(client, q, db, coll))
 
-    def createQuery(rq: qb.QueryFree[QuerySettings]): FreeApp[QuerySettings] = lift(qb.query(rq))
+    def createQuery(rq: qb.QueryFree[MongoQuerySettings]): FreeApp[MongoQuerySettings] = lift(qb.query(rq))
 
     object LogInteraction {
       def debug(msg: String) = Copoyo[InteractionApp](LogMsg(DebugLevel, msg))
@@ -152,7 +202,7 @@ package object dsl { outer ⇒
       def error(msg: String) = Copoyo[InteractionApp](LogMsg(ErrorLevel, msg))
     }
 
-    def program(rq: qb.QueryFree[QuerySettings], client: MongoClient,
+    def program(rq: qb.QueryFree[MongoQuerySettings], client: MongoClient,
                 db: String, coll: String, mode: FetchMode.Type): FreeApp[NonEmptyResult] =
       for {
         qs ← createQuery(rq)
@@ -218,15 +268,15 @@ package object dsl { outer ⇒
 
     trait Streamer[M[_]] {
       protected val logger = org.apache.log4j.Logger.getLogger("streamer-query")
-      def create[T](q: QuerySettings, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): M[T]
+      def create[T](q: MongoQuerySettings, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): M[T]
     }
 
     trait ChannelStreamer[M[_]] {
       protected val logger = org.apache.log4j.Logger.getLogger("streamer-channel-query")
-      def create[T](q: QuerySettings, db: String, coll: String)(implicit pool: ExecutorService): M[T]
+      def create[T](q: MongoQuerySettings, db: String, coll: String)(implicit pool: ExecutorService): M[T]
     }
 
-    private[dsl] def mongoResource[T](qs: QuerySettings, client: MongoClient, db: String, collection: String, log: org.apache.log4j.Logger)(implicit pool: ExecutorService): Process[Task, T] = {
+    private[dsl] def mongoResource[T](qs: MongoQuerySettings, client: MongoClient, db: String, collection: String, log: org.apache.log4j.Logger)(implicit pool: ExecutorService): Process[Task, T] = {
       io.resource(Task.delay {
         val coll = client.getDB(db).getCollection(collection)
         val cursor = coll.find(qs.q)
@@ -247,7 +297,7 @@ package object dsl { outer ⇒
 
     object ChannelStreamer {
       implicit object channelStreamerProc extends ChannelStreamer[MStream] {
-        override def create[T](q: QuerySettings, db: String, coll: String)(implicit pool: ExecutorService): MStream[T] =
+        override def create[T](q: MongoQuerySettings, db: String, coll: String)(implicit pool: ExecutorService): MStream[T] =
           DBChannel(Process.eval(Task.now { client: MongoClient ⇒
             Task(mongoResource[T](q, client, db, coll, logger))
           }))
@@ -256,13 +306,13 @@ package object dsl { outer ⇒
 
     object Streamer {
       implicit object ProcStreamer extends Streamer[MProcess] {
-        override def create[T](q: QuerySettings, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): MProcess[T] =
+        override def create[T](q: MongoQuerySettings, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): MProcess[T] =
           mongoResource[T](q, client, db, coll, logger)
       }
 
       implicit object RxStreamer extends Streamer[Observable] {
-        import com.mongodb.{MongoClient, DBCursor}
-        override def create[T](qs: QuerySettings, client: MongoClient, db: String, collection: String)(implicit pool: ExecutorService): Observable[T] = {
+        import com.mongodb.{ MongoClient, DBCursor }
+        override def create[T](qs: MongoQuerySettings, client: MongoClient, db: String, collection: String)(implicit pool: ExecutorService): Observable[T] = {
           Observable { subscriber: Subscriber[T] ⇒
             subscriber.setProducer(new Producer() {
               lazy val cursor: Option[DBCursor] = (Try {
@@ -301,18 +351,18 @@ package object dsl { outer ⇒
     }
   }
 
-  implicit class ProgramSyntax(val self: qb.QueryFree[QuerySettings]) extends AnyVal {
+  implicit class ProgramSyntax(val self: qb.QueryFree[MongoQuerySettings]) extends AnyVal {
     import outer.Interaction._
     import scalaz.Free.runFC
     import mongo.dsl.qb._
 
-    private def init = QuerySettings(new BasicDBObject)
+    private def init = MongoQuerySettings(new BasicDBObject)
 
     /**
      *
      * @return DBObject
      */
-    def toDBObject = ((runFC[StatementOp, QueryS, QuerySettings](self)(QueryInterpreter)).run(init)._1).q
+    def toDBObject = ((runFC[StatementOp, QueryM, MongoQuerySettings](self)(MongoQueryInterpreter)).run(init)._1).q
 
     /**
      *
@@ -356,7 +406,7 @@ package object dsl { outer ⇒
      */
     def sChannel[M[_]: ChannelStreamer](db: String, coll: String)(implicit pool: ExecutorService): M[DBObject] =
       implicitly[ChannelStreamer[M]].create(
-        runFC[qb.StatementOp, QueryS, QuerySettings](self)(qb.QueryInterpreter).run(outer.qb.init)._1, db, coll)
+        runFC[qb.StatementOp, QueryM, MongoQuerySettings](self)(qb.MongoQueryInterpreter).run(outer.qb.init)._1, db, coll)
 
     /**
      * Works with [[mongo.dsl.MProcess]], [[rx.lang.scala.Observable]] types
@@ -371,7 +421,7 @@ package object dsl { outer ⇒
     //val m = implicitly[scalaz.Monad[M]]
     def stream[M[_]: Streamer](db: String, coll: String)(implicit pool: ExecutorService, client: MongoClient): M[DBObject] = {
       implicitly[Streamer[M]].create(
-        (runFC[qb.StatementOp, QueryS, QuerySettings](self)(qb.QueryInterpreter)).run(outer.qb.init)._1, client, db, coll)
+        (runFC[qb.StatementOp, QueryM, MongoQuerySettings](self)(qb.MongoQueryInterpreter)).run(outer.qb.init)._1, client, db, coll)
     }
   }
 }

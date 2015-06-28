@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package mongo.join
+package join
 
 import mongo.dsl.qb
 import org.apache.log4j.Logger
@@ -27,11 +27,7 @@ import rx.lang.scala.Producer
 package object observable {
   import qb._
 
-  trait MongoObservableStream extends DBModule {
-    override type Client = com.mongodb.MongoClient
-    override type DBRecord = com.mongodb.DBObject
-    override type QuerySettings = mongo.dsl.QuerySettings
-    override type Cursor = com.mongodb.Cursor
+  trait MongoObservableStream extends MongoDBModule {
     override type DBStream[Out] = Observable[Out]
   }
 
@@ -71,6 +67,11 @@ package object observable {
       def fetch(n: Long): Unit = go(n)
     }
 
+    class QueryProducerC[T](val subscriber: Subscriber[T], val cursor: MongoObservableStream#Cursor, val log: Logger) extends Producer {
+      self: { def fetch(n: Long) } ⇒
+      override def request(n: Long) = fetch(n)
+    }
+
     class QueryProducer[T](val subscriber: Subscriber[T], val db: String, val coll: String,
                            val q: MongoObservableStream#DBRecord, val c: MongoObservableStream#Client, val log: Logger) extends Producer {
       self: { def fetch(n: Long) } ⇒
@@ -90,13 +91,6 @@ package object observable {
         log.info(s"[$db - $coll] Query: $q")
         Observable { subscriber: Subscriber[A] ⇒
           subscriber.setProducer(new QueryProducer[A](subscriber, db, coll, q.q, client, log) with Fetcher[A])
-        }.subscribeOn(scheduler)
-      }
-
-      private def resourceR[A](q: MongoObservableStream#DBRecord, db: String, coll: String): Observable[A] = {
-        log.info(s"[$db - $coll] Query: $q")
-        Observable { subscriber: Subscriber[A] ⇒
-          subscriber.setProducer(new QueryProducer[A](subscriber, db, coll, q, client, log) with Fetcher[A])
         }.subscribeOn(scheduler)
       }
 

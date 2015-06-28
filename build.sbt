@@ -18,7 +18,6 @@ initialCommands in console in Test := "import org.specs2._"
 
 shellPrompt := { state => System.getProperty("user.name") + "> " }
 
-
 scalacOptions ++= Seq(
   "-feature",
   "-deprecation",
@@ -30,6 +29,9 @@ scalacOptions ++= Seq(
   "-Yno-adapted-args",
   "-target:jvm-1.7"
 )
+
+useJGit
+enablePlugins(GitVersioning)
 
 val MongoDriverVersion = "3.0.2"
 val ScalazStreamVersion = "0.7.1a"
@@ -52,16 +54,19 @@ resolvers ++= Seq(
 )
 
 libraryDependencies ++= Seq(
-    "org.mongodb"       %   "mongo-java-driver"           %   MongoDriverVersion  withSources(),
-    "org.scalaz.stream" %%  "scalaz-stream"     %   ScalazStreamVersion withSources(),
-    "io.reactivex"      %%  "rxscala"           %   RxScala             withSources(),
-    "com.chuusai"       %%  "shapeless"         %   "2.2.3",
-    "log4j"             %   "log4j"             %   "1.2.14")
+    "org.mongodb"            %   "mongo-java-driver"       %   MongoDriverVersion  withSources(),
+    "com.datastax.cassandra" %   "cassandra-driver-core"   %   "2.1.6",
+    "org.scalaz.stream"      %%  "scalaz-stream"           %   ScalazStreamVersion withSources(),
+    "io.reactivex"           %%  "rxscala"                 %   RxScala             withSources(),
+    "com.chuusai"            %%  "shapeless"               %   "2.2.3",
+    "log4j"                  %   "log4j"                   %   "1.2.14")
 
 libraryDependencies ++= Seq(
-  "de.bwaldvogel"   %   "mongo-java-server" %   "1.4.1"   % "test" withSources(),
-  "org.specs2"      %%  "specs2-core"       %   "3.2"     % "test" withSources(),
-  "oncue.ermine"    %%  "ermine-parser"     %   "0.2.1-2" % "test" withSources()
+  "de.bwaldvogel"     %   "mongo-java-server" %   "1.4.1"   % "test" withSources(),
+  "org.cassandraunit" %   "cassandra-unit"    %   "2.0.2.2" % "test",
+  "org.specs2"        %%  "specs2-core"       %   "3.2"     % "test" withSources(),
+  "org.scalatest"     %%  "scalatest"         %   "2.1.4"   % "test",
+  "oncue.ermine"      %%  "ermine-parser"     %   "0.2.1-2" % "test" withSources()
 )
 
 scalacOptions ++= Seq(

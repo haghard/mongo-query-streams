@@ -14,43 +14,39 @@
 
 package mongo
 
+import com.datastax.driver.core.Row
 import org.apache.log4j.Logger
 import scalaz.concurrent.Task
 import scalaz.{ -\/, \/, \/- }
 import scala.util.{ Failure, Success, Try }
 import scalaz.stream._
 import java.util.concurrent.{ ExecutorService, TimeUnit }
-import com.mongodb.{ DBObject, MongoClient, MongoException }
 import scalaz.Scalaz._
 import scalaz.stream.Process._
 import scalaz.stream.process1._
 
 package object query { self ⇒
 
-  type MongoChannel[T, A] = Channel[Task, T, Process[Task, A]]
+  import com.mongodb.{ DBObject, MongoClient, MongoException }
+
+  type ResponseChannel[T, A] = Channel[Task, T, Process[Task, A]]
 
   case class QuerySetting(q: DBObject, db: String, cName: String, sortQuery: Option[DBObject],
                           limit: Option[Int], skip: Option[Int], maxTimeMS: Option[Long],
                           readPref: Option[ReadPreference])
 
   trait DBChannelFactory[T] {
-    def createChannel(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[T, DBObject]
+    def createChannel(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[T, com.mongodb.DBObject]
   }
 
-  /**
-   *
-   * @param out MongoChannel[T, A]
-   * @tparam T - MongoClient or Db
-   * @tparam A
-   */
-  case class DBChannel[T, A](val out: MongoChannel[T, A]) {
+  case class DBChannel[T, A](val out: ResponseChannel[T, A]) {
 
     private def liftP[B](f: Process[Task, A] ⇒ Process[Task, B]): DBChannel[T, B] =
       DBChannel { out.map(step ⇒ step.andThen(task ⇒ task.map(p ⇒ f(p)))) }
 
     private def pipe[B](p2: Process1[A, B]): DBChannel[T, B] = liftP(_.pipe(p2))
 
-    private[mongo] def |>[B](p2: Process1[A, B]): DBChannel[T, B] = pipe(p2)
+    def |>[B](p2: Process1[A, B]): DBChannel[T, B] = pipe(p2)
 
     /**
      *
@@ -174,17 +170,18 @@ package object query { self ⇒
       flatMap { id: A ⇒ relation(id) |> lift(f(id, _)) }
 
     /**
-     * Allows you to extract specified field from [[DBObject]] by name with type cast
+     * Allows you to extract specified field from [[Row]] by name with type cast
      * @param name field name
      * @tparam B  field type
-     * @throws MongoException If item is not a `DBObject`.
+     * @throws Exception If item is not a `Row`.
      * @return DBChannel[T, B]
      */
     def column[B](name: String): DBChannel[T, B] = {
       pipe(lift { record ⇒
         record match {
           case r: DBObject ⇒ r.get(name).asInstanceOf[B]
-          case other       ⇒ throw new MongoException(s"DBObject expected but found ${other.getClass.getName}")
+          //case r: Row => r.ge   
+          case other       ⇒ throw new Exception(s"DatabaseObject expected but found ${other.getClass.getName}")
         }
       })
     }

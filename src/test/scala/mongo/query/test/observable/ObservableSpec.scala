@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.CountDownLatch
 
 import com.mongodb.DBObject
-import mongo.query.test.{ MongoIntegrationEnv, MongoStreamsEnviroment }
+import mongo.query.test.{ MongoIntegrationEnv, MongoEnviromentLifecycle }
 import org.specs2.mutable.Specification
 import rx.lang.scala.schedulers.ExecutionContextScheduler
 import rx.lang.scala.{ Observable, Subscriber }
@@ -29,12 +29,12 @@ import scalaz.stream.io
 
 class ObservableSpec extends Specification {
   import mongo._
-  import mongo.join.observable._
+  import join.observable._
   import dsl._
   import qb._
   import MongoIntegrationEnv._
 
-  "Build query and perform streaming using Observable" in new MongoStreamsEnviroment {
+  "Build query and perform streaming using Observable" in new MongoEnviromentLifecycle {
     initMongo
 
     val batchSize = 3
@@ -68,7 +68,7 @@ class ObservableSpec extends Specification {
     5 === responses.get()
   }
 
-  "One to many join through stream with fixed columns" in new MongoStreamsEnviroment {
+  "One to many join through stream with fixed columns" in new MongoEnviromentLifecycle {
     initMongo
     val buffer = Buffer.empty[String]
     val Sink = io.fillBuffer(buffer)
@@ -106,7 +106,7 @@ class ObservableSpec extends Specification {
     10 === responses.get()
   }
 
-  "One to many join through stream with raw objects" in new MongoStreamsEnviroment {
+  "One to many join through stream with raw objects" in new MongoEnviromentLifecycle {
     initMongo
     val buffer = Buffer.empty[String]
     val Sink = io.fillBuffer(buffer)

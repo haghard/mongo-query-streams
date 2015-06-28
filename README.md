@@ -163,7 +163,7 @@ Here's a example of how you can do joinByPk between collections `LANGS` and `PRO
   import dsl._
   import Query._
   import scalaz.stream.Process
-  import mongo.join.process.MongoProcessStream
+  import join.process.MongoProcessStream
   
   val buffer = Buffer.empty[String]
   val Sink = scalaz.stream.io.fillBuffer(buffer)
@@ -203,7 +203,7 @@ Join using `rx.lang.scala.Observable`
   import Query._
   import rx.lang.scala.Subscriber  
   import rx.lang.scala.schedulers.ExecutionContextScheduler
-  import mongo.join.observable.MongoObservableStream
+  import join.observable.MongoObservableStream
   
   val buffer = Buffer.empty[String]
   val Sink = io.fillBuffer(buffer)

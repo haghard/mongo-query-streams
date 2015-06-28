@@ -12,23 +12,20 @@
  * limitations under the License.
  */
 
-package mongo
-
-import mongo.dsl.qb.QueryS
+import joiners.JoinerG
+import mongo.dsl.qb.QueryM
 import scala.reflect.ClassTag
 import org.apache.log4j.Logger
 import scala.language.higherKinds
 import java.util.concurrent.ExecutorService
 
 /**
- *
- * Represent abstract way for doing join
+ * Based on idea from: http://io.pellucid.com/blog/abstract-algebraic-data-type
  *
  */
 package object join {
   import mongo.dsl._
-  import mongo.dsl.qb.StatementOp
-  import mongo.dsl.qb.QueryFree
+  import mongo.dsl.qb.{ QueryFree, StatementOp }
 
   /**
    * Base abstraction for types in Join domain
@@ -45,6 +42,13 @@ package object join {
     }
   }
 
+  trait MongoDBModule extends DBModule {
+    override type Client = com.mongodb.MongoClient
+    override type DBRecord = com.mongodb.DBObject
+    override type QuerySettings = mongo.dsl.MongoQuerySettings
+    override type Cursor = com.mongodb.Cursor
+  }
+
   /**
    * Base abstraction for methods in Join domain
    * @tparam T
@@ -54,80 +58,34 @@ package object join {
     protected var client: T#Client = _
     protected var exec: ExecutorService = null
     private val initQ = new com.mongodb.BasicDBObject
-    private val init = QuerySettings(initQ)
+    private val initS = MongoQuerySettings(initQ)
 
-    def withClient(client: T#Client) = {
+    private def withClient(client: T#Client) = {
       this.client = client
       this
     }
 
-    def withLogger(log: Logger) = {
+    private def withLogger(log: Logger) = {
       this.log = log
       this
     }
 
-    def withExecutor(ex: ExecutorService): Joiner[T] = {
+    private def withExecutor(ex: ExecutorService): Joiner[T] = {
       exec = ex
       this
     }
 
-    /**
-     * @param q
-     * @return
-     */
-    protected def createQuery(q: QueryFree[T#QuerySettings]): QuerySettings =
-      scalaz.Free.runFC[StatementOp, QueryS, T#QuerySettings](q)(qb.QueryInterpreter).run(init)._1
+    protected def createQuery(q: QueryFree[T#QuerySettings]): MongoQuerySettings =
+      scalaz.Free.runFC[StatementOp, QueryM, T#QuerySettings](q)(qb.MongoQueryInterpreter).run(initS)._1
 
-    /**
-     *
-     * @param q
-     * @param db
-     * @param coll
-     * @param keyField
-     * @tparam A
-     * @return
-     */
     def leftField[A](q: qb.QueryFree[T#QuerySettings], db: String, coll: String, keyField: String): T#DBStream[A]
 
-    /**
-     *
-     * @param q
-     * @param db
-     * @param coll
-     * @return
-     */
     def left(q: qb.QueryFree[T#QuerySettings], db: String, coll: String): T#DBStream[T#DBRecord]
 
-    /**
-     *
-     * @param r
-     * @param db
-     * @param collectionName
-     * @tparam A
-     * @tparam B
-     * @return
-     */
     def relationField[A, B](r: A ⇒ qb.QueryFree[T#QuerySettings], db: String, collectionName: String): A ⇒ T#DBStream[B]
 
-    /**
-     *
-     * @param r
-     * @param db
-     * @param collectionName
-     * @return
-     */
     def relation(r: T#DBRecord ⇒ qb.QueryFree[T#QuerySettings], db: String, collectionName: String): T#DBRecord ⇒ T#DBStream[T#DBRecord]
 
-    /**
-     *
-     * @param l
-     * @param relation
-     * @param f
-     * @tparam A
-     * @tparam B
-     * @tparam C
-     * @return
-     */
     def innerJoin[A, B, C](l: T#DBStream[A])(relation: A ⇒ T#DBStream[B])(f: (A, B) ⇒ C): T#DBStream[C]
   }
 
@@ -136,6 +94,25 @@ package object join {
       j.withExecutor(pool).withLogger(log).withClient(c)
   }
 
+  case class JoinG[T <: DBModule: JoinerG](implicit pool: ExecutorService, c: T#Client, t: ClassTag[T]) {
+    implicit val logger = Logger.getLogger(s"${t.runtimeClass.getName.dropWhile(_ != '$').drop(1)}-joiner")
+
+    def join[A](leftQ: QueryFree[T#QuerySettings], lCollection: String,
+                rightQ: T#DBRecord ⇒ QueryFree[T#QuerySettings], rCollection: String,
+                db: String)(f: (T#DBRecord, T#DBRecord) ⇒ A): T#DBStream[A] = {
+      val joiner = JoinerG[T]
+      joiner.join[T#DBRecord, T#DBRecord, A](joiner.left(leftQ, lCollection, db))(joiner.right(rightQ, rCollection, db))(f)
+    }
+  }
+
+  /**
+   *
+   * @param ev1
+   * @param pool
+   * @param c
+   * @param t
+   * @tparam T
+   */
   case class Join[T <: DBModule: Joiner](implicit pool: ExecutorService, c: T#Client, t: ClassTag[T]) {
 
     implicit val logger = Logger.getLogger(s"${t.runtimeClass.getName.dropWhile(_ != '$').drop(1)}-Joiner")

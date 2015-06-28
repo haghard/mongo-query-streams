@@ -12,17 +12,13 @@
  * limitations under the License.
  */
 
-package mongo.join
+package join
 
 package object process {
   import mongo.query.DBChannel
   import mongo.dsl.qb.QueryFree
 
-  trait MongoProcessStream extends DBModule {
-    override type Client = com.mongodb.MongoClient
-    override type DBRecord = com.mongodb.DBObject
-    override type QuerySettings = mongo.dsl.QuerySettings
-    override type Cursor = com.mongodb.Cursor
+  trait MongoProcessStream extends MongoDBModule {
     override type DBStream[Out] = DBChannel[Client, Out]
   }
 
