@@ -34,6 +34,8 @@ trait CassandraEnviromentLifecycle extends BeforeAndAfterAll { this: Suite ⇒
   val logger = org.apache.log4j.Logger.getLogger("Cassandra-Enviroment")
   implicit val executor = Executors.newFixedThreadPool(3, new NamedThreadFactory("cassandra-test-worker"))
 
+  val cassandraHost = List(new InetSocketAddress("127.0.0.1", 9142)).asJava
+
   val LANGS = "langs"
   val PROGRAMMERS = "programmers"
   val KEYSPACE = "world"

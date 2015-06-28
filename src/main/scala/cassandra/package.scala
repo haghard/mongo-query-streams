@@ -27,10 +27,10 @@ package object cassandra {
     override type Client = com.datastax.driver.core.Cluster
     override type DBRecord = com.datastax.driver.core.Row
     override type QuerySettings = CassandraQuerySettings
-    override type Cursor = com.datastax.driver.core.ResultSet
+    override type Cursor = java.util.Iterator[com.datastax.driver.core.Row]
   }
 
-  trait CassandraObservable extends CassandraDBModule {
+  trait CassandraObservableStream extends CassandraDBModule {
     override type DBStream[Out] = rx.lang.scala.Observable[Out]
   }
 
@@ -38,7 +38,7 @@ package object cassandra {
     override type DBStream[Out] = DBChannel[Client, Out]
   }
 
-  implicit object joiner extends join.Joiner[CassandraObservable] {
+  implicit object joiner extends join.Joiner[CassandraObservableStream] {
     val scheduler = ExecutionContextScheduler(ExecutionContext.fromExecutor(exec))
 
     /**
@@ -50,7 +50,7 @@ package object cassandra {
      * @tparam A
      * @return
      */
-    override def leftField[A](q: QueryFree[CassandraObservable#QuerySettings], db: String, coll: String, keyField: String): Observable[A] = ???
+    override def leftField[A](q: QueryFree[CassandraObservableStream#QuerySettings], db: String, coll: String, keyField: String): Observable[A] = ???
 
     /**
      *
@@ -59,7 +59,7 @@ package object cassandra {
      * @param collectionName
      * @return
      */
-    override def relation(r: (CassandraObservable#DBRecord) ⇒ QueryFree[CassandraObservable#QuerySettings], db: String, collectionName: String): (CassandraObservable#DBRecord) ⇒ Observable[CassandraObservable#DBRecord] = ???
+    override def relation(r: (CassandraObservableStream#DBRecord) ⇒ QueryFree[CassandraObservableStream#QuerySettings], db: String, collectionName: String): (CassandraObservableStream#DBRecord) ⇒ Observable[CassandraObservableStream#DBRecord] = ???
 
     /**
      *
@@ -80,7 +80,7 @@ package object cassandra {
      * @param coll
      * @return
      */
-    override def left(q: QueryFree[CassandraObservable#QuerySettings], db: String, coll: String): Observable[CassandraObservable#DBRecord] = ???
+    override def left(q: QueryFree[CassandraObservableStream#QuerySettings], db: String, coll: String): Observable[CassandraObservableStream#DBRecord] = ???
 
     /**
      *
@@ -91,6 +91,6 @@ package object cassandra {
      * @tparam B
      * @return
      */
-    override def relationField[A, B](r: (A) ⇒ QueryFree[CassandraObservable#QuerySettings], db: String, collectionName: String): (A) ⇒ Observable[B] = ???
+    override def relationField[A, B](r: (A) ⇒ QueryFree[CassandraObservableStream#QuerySettings], db: String, collectionName: String): (A) ⇒ Observable[B] = ???
   }
 }

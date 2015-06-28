@@ -29,7 +29,7 @@ import scala.concurrent.ExecutionContext
 import scalaz.concurrent.Task
 import scalaz.stream.{ Process, io }
 
-class JoinerGSpec extends Specification {
+class JoinerGMongoSpec extends Specification {
   import mongo._
   import join._
   import dsl._
@@ -72,7 +72,7 @@ class JoinerGSpec extends Specification {
 
     implicit val c = client
     val joiner = JoinG[MongoObservableStream]
-
+    //
     val query = joiner.join(qLang, LANGS, qProg(_), PROGRAMMERS, TEST_DB) { (l, r) ⇒
       s"Primary-key:${l.get("index")} - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
     }
@@ -103,3 +103,4 @@ class JoinerGSpec extends Specification {
     responses.get === 10
   }
 }
+

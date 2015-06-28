@@ -12,7 +12,8 @@
  * limitations under the License.
  */
 
-import joiners.JoinerG
+import storage.Storage
+import joinG.JoinerG
 import mongo.dsl.qb.QueryM
 import scala.reflect.ClassTag
 import org.apache.log4j.Logger
@@ -94,14 +95,27 @@ package object join {
       j.withExecutor(pool).withLogger(log).withClient(c)
   }
 
-  case class JoinG[T <: DBModule: JoinerG](implicit pool: ExecutorService, c: T#Client, t: ClassTag[T]) {
+  /**
+   * @param ev1
+   * @param pool
+   * @param client
+   * @param t
+   * @tparam T
+   */
+  case class JoinG[T <: DBModule: JoinerG: Storage](implicit pool: ExecutorService, client: T#Client, t: ClassTag[T]) {
     implicit val logger = Logger.getLogger(s"${t.runtimeClass.getName.dropWhile(_ != '$').drop(1)}-joiner")
 
     def join[A](leftQ: QueryFree[T#QuerySettings], lCollection: String,
                 rightQ: T#DBRecord ⇒ QueryFree[T#QuerySettings], rCollection: String,
-                db: String)(f: (T#DBRecord, T#DBRecord) ⇒ A): T#DBStream[A] = {
+                resourceName: String)(f: (T#DBRecord, T#DBRecord) ⇒ A): T#DBStream[A] = {
+
       val joiner = JoinerG[T]
-      joiner.join[T#DBRecord, T#DBRecord, A](joiner.left(leftQ, lCollection, db))(joiner.right(rightQ, rCollection, db))(f)
+      val storage = Storage[T]
+
+      val left = storage.resource(leftQ, lCollection, resourceName, logger, pool)(client)
+      val right = storage.resource(rightQ, rCollection, resourceName, logger, pool)(client)
+
+      joiner.join[T#DBRecord, T#DBRecord, A](left)(right)(f)
     }
   }
 
@@ -115,7 +129,7 @@ package object join {
    */
   case class Join[T <: DBModule: Joiner](implicit pool: ExecutorService, c: T#Client, t: ClassTag[T]) {
 
-    implicit val logger = Logger.getLogger(s"${t.runtimeClass.getName.dropWhile(_ != '$').drop(1)}-Joiner")
+    implicit val logger = Logger.getLogger(s"${t.runtimeClass.getName.dropWhile(_ != '$').drop(1)}-joiner")
 
     private val joiner = Joiner[T]
 
