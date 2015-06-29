@@ -47,7 +47,7 @@ package object join {
 
   /**
    * Base abstraction for methods in Join domain
-   * @tparam T
+   * @tparam T The type for db streamer
    */
   abstract class Joiner[T <: DBModule] {
     protected var log: Logger = _
@@ -72,11 +72,11 @@ package object join {
     }
 
     /**
-     * @param q
-     * @return
+     * @param query
+     * @return QuerySettings
      */
-    protected def createQuery(q: QueryFree[T#QuerySettings]): QuerySettings =
-      scalaz.Free.runFC[StatementOp, QueryS, T#QuerySettings](q)(qb.QueryInterpreter).run(init)._1
+    protected def createQuery(query: QueryFree[T#QuerySettings]): QuerySettings =
+      scalaz.Free.runFC[StatementOp, QueryS, T#QuerySettings](query)(qb.QueryInterpreter).run(init)._1
 
     /**
      *
@@ -85,7 +85,7 @@ package object join {
      * @param collection
      * @param keyField
      * @tparam A
-     * @return
+     * @return T#DBStream[A]
      */
     def leftField[A](query: qb.QueryFree[T#QuerySettings], db: String, collection: String, keyField: String): T#DBStream[A]
 
@@ -94,7 +94,7 @@ package object join {
      * @param query
      * @param db
      * @param collection
-     * @return
+     * @return T#DBStream[T#DBRecord]
      */
     def left(query: qb.QueryFree[T#QuerySettings], db: String, collection: String): T#DBStream[T#DBRecord]
 

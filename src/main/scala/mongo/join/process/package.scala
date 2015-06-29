@@ -18,7 +18,7 @@ package object process {
   import mongo.query.DBChannel
   import mongo.dsl.qb.QueryFree
 
-  trait MongoProcessStream extends DBModule {
+  trait MongoProcess extends DBModule {
     override type Client = com.mongodb.MongoClient
     override type DBRecord = com.mongodb.DBObject
     override type QuerySettings = mongo.dsl.QuerySettings
@@ -26,14 +26,14 @@ package object process {
     override type DBStream[Out] = DBChannel[Client, Out]
   }
 
-  object MongoProcessStream {
+  object MongoProcess {
     import scalaz.concurrent.Task
     import scalaz.stream.process1.lift
     import scalaz.stream.{ Cause, io, Process }
     val P = scalaz.stream.Process
 
-    implicit object joiner extends Joiner[MongoProcessStream] {
-      private def resource[T](qs: MongoProcessStream#QuerySettings, client: MongoProcessStream#Client,
+    implicit object joiner extends Joiner[MongoProcess] {
+      private def resource[T](qs: MongoProcess#QuerySettings, client: MongoProcess#Client,
                               db: String, collection: String): Process[Task, T] = {
         io.resource(Task.delay {
           val coll = client.getDB(db).getCollection(collection)
@@ -54,33 +54,33 @@ package object process {
         }
       }
 
-      override def leftField[A](q: QueryFree[MongoProcessStream#QuerySettings],
-                                db: String, collection: String, keyColl: String): MongoProcessStream#DBStream[A] =
-        DBChannel[MongoProcessStream#Client, A](P.eval(Task.now { client: MongoProcessStream#Client ⇒
+      override def leftField[A](q: QueryFree[MongoProcess#QuerySettings],
+                                db: String, collection: String, keyColl: String): MongoProcess#DBStream[A] =
+        DBChannel[MongoProcess#Client, A](P.eval(Task.now { client: MongoProcess#Client ⇒
           Task(resource(createQuery(q), client, db, collection))
         })).column[A](keyColl)
 
-      override def left(q: QueryFree[MongoProcessStream#QuerySettings],
-                        db: String, collection: String): DBChannel[MongoProcessStream#Client, MongoProcessStream#DBRecord] =
-        DBChannel[MongoProcessStream#Client, MongoProcessStream#DBRecord](P.eval(Task.now { client: MongoProcessStream#Client ⇒
+      override def left(q: QueryFree[MongoProcess#QuerySettings],
+                        db: String, collection: String): DBChannel[MongoProcess#Client, MongoProcess#DBRecord] =
+        DBChannel[MongoProcess#Client, MongoProcess#DBRecord](P.eval(Task.now { client: MongoProcess#Client ⇒
           Task(resource(createQuery(q), client, db, collection))
         }))
 
-      override def relationField[A, B](r: A ⇒ QueryFree[MongoProcessStream#QuerySettings],
-                                       db: String, collection: String): A ⇒ MongoProcessStream#DBStream[B] =
+      override def relationField[A, B](r: A ⇒ QueryFree[MongoProcess#QuerySettings],
+                                       db: String, collection: String): A ⇒ MongoProcess#DBStream[B] =
         id ⇒
-          DBChannel[MongoProcessStream#Client, B](P.eval(Task.now { client: MongoProcessStream#Client ⇒
+          DBChannel[MongoProcess#Client, B](P.eval(Task.now { client: MongoProcess#Client ⇒
             Task(resource(createQuery(r(id)), client, db, collection))
           }))
 
-      override def relation(r: (MongoProcessStream#DBRecord) ⇒ QueryFree[MongoProcessStream#QuerySettings],
-                            db: String, collection: String): (MongoProcessStream#DBRecord) ⇒ DBChannel[MongoProcessStream#Client, MongoProcessStream#DBRecord] =
+      override def relation(r: (MongoProcess#DBRecord) ⇒ QueryFree[MongoProcess#QuerySettings],
+                            db: String, collection: String): (MongoProcess#DBRecord) ⇒ DBChannel[MongoProcess#Client, MongoProcess#DBRecord] =
         topRecord ⇒
-          DBChannel[MongoProcessStream#Client, MongoProcessStream#DBRecord](P.eval(Task.now { client: MongoProcessStream#Client ⇒
+          DBChannel[MongoProcess#Client, MongoProcess#DBRecord](P.eval(Task.now { client: MongoProcess#Client ⇒
             Task(resource(createQuery(r(topRecord)), client, db, collection))
           }))
 
-      override def innerJoin[A, B, C](l: MongoProcessStream#DBStream[A])(relation: A ⇒ MongoProcessStream#DBStream[B])(f: (A, B) ⇒ C): MongoProcessStream#DBStream[C] =
+      override def innerJoin[A, B, C](l: MongoProcess#DBStream[A])(relation: A ⇒ MongoProcess#DBStream[B])(f: (A, B) ⇒ C): MongoProcess#DBStream[C] =
         for {
           id ← l
           rs ← relation(id) |> lift(f(id, _))
