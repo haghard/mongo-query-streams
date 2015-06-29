@@ -157,7 +157,7 @@ package object query { self ⇒
      * @tparam C
      * @return
      */
-    def innerJoin[E, C](relation: A ⇒ DBChannel[T, E])(f: (A, E) ⇒ C): DBChannel[T, C] =
+    def join[E, C](relation: A ⇒ DBChannel[T, E])(f: (A, E) ⇒ C): DBChannel[T, C] =
       flatMap { id: A ⇒ relation(id) |> (lift { f(id, _) }) }
 
     /**
@@ -166,7 +166,7 @@ package object query { self ⇒
      * @tparam C
      * @return
      */
-    def innerJoinRaw[C](relation: A ⇒ DBChannel[T, A])(f: (A, A) ⇒ C): DBChannel[T, C] =
+    def joinRaw[C](relation: A ⇒ DBChannel[T, A])(f: (A, A) ⇒ C): DBChannel[T, C] =
       flatMap { id: A ⇒ relation(id) |> lift(f(id, _)) }
 
     /**
@@ -180,7 +180,6 @@ package object query { self ⇒
       pipe(lift { record ⇒
         record match {
           case r: DBObject ⇒ r.get(name).asInstanceOf[B]
-          //case r: Row => r.ge   
           case other       ⇒ throw new Exception(s"DatabaseObject expected but found ${other.getClass.getName}")
         }
       })
@@ -253,7 +252,7 @@ package object query { self ⇒
         case \/-(qs) ⇒
           DBChannel(eval(Task now { client: MongoClient ⇒
             Task {
-              val logger = Logger.getLogger("query")
+              val logger = Logger.getLogger("mongo-streamer")
               scalaz.stream.io.resource(
                 Task delay {
                   val collection = client.getDB(qs.db).getCollection(qs.cName)

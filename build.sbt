@@ -58,7 +58,6 @@ libraryDependencies ++= Seq(
     "com.datastax.cassandra" %   "cassandra-driver-core"   %   "2.1.6",
     "org.scalaz.stream"      %%  "scalaz-stream"           %   ScalazStreamVersion withSources(),
     "io.reactivex"           %%  "rxscala"                 %   RxScala             withSources(),
-    "com.chuusai"            %%  "shapeless"               %   "2.2.3",
     "log4j"                  %   "log4j"                   %   "1.2.14")
 
 libraryDependencies ++= Seq(

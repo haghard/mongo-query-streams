@@ -12,45 +12,46 @@
  * limitations under the License.
  */
 
-package mongo.query.test.cassandra
+package mongo.query.test.join
 
+import join.Join
+import scalaz.concurrent.Task
+import rx.lang.scala.Subscriber
+import java.util.function.UnaryOperator
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicReference
-import java.util.function.UnaryOperator
 
-import rx.lang.scala.Subscriber
+import org.scalatest.{ Matchers, WordSpecLike }
+import join.cassandra.{ CassandraObservable, CassandraProcess }
+import com.datastax.driver.core.{ Cluster, ConsistencyLevel, Row ⇒ CRow }
+import mongo.query.test.cassandra.CassandraEnviromentLifecycle
 import rx.lang.scala.schedulers.ExecutionContextScheduler
 
-import scala.concurrent.ExecutionContext
-import scalaz.concurrent.Task
-import scalaz.stream.{ Process, io }
 import scala.collection.mutable.Buffer
-import com.datastax.driver.core.Cluster
-import com.datastax.driver.core.{ Row ⇒ CRow }
-import org.scalatest.{ Matchers, WordSpecLike }
-import cassandra.{ CassandraObservableStream, CassandraProcessStream }
+import scala.concurrent.ExecutionContext
+import scalaz.stream.{ Process, io }
 
-class JoinGCassandraSpec extends WordSpecLike with Matchers with CassandraEnviromentLifecycle {
-  import mongo._
-  import join._
-  import dsl._
-  import qb._
+class JoinCassandraSpec extends WordSpecLike with Matchers with CassandraEnviromentLifecycle {
+  import dsl.cassandra._
 
-  "JoinG with CassandraProcessStream" should {
+  "Join with CassandraProcess" should {
     "have run" in {
       val P = Process
       val buffer = Buffer.empty[String]
       val Sink = io.fillBuffer(buffer)
       implicit val client = Cluster.builder().addContactPointsWithPorts(cassandraHost).build
 
-      val qLang = for { q ← qFreeM("SELECT id, name FROM {0}") } yield q
-
-      def qProg(r: CRow) = for {
-        _ ← qFreeM("SELECT * FROM {0} WHERE lang = ? allow filtering")
-        q ← cParam[java.lang.Long]("id_lang", r.getLong("id"))
+      val qLang = for {
+        q ← select("SELECT id, name FROM {0}")
       } yield q
 
-      val query = JoinG[CassandraProcessStream].join(qLang, LANGS, qProg, PROGRAMMERS, "world") { (l, r) ⇒
+      def qProg(r: CRow) = for {
+        _ ← select("SELECT * FROM {0} WHERE lang = ? allow filtering")
+        _ ← fk[java.lang.Long]("id_lang", r.getLong("id"))
+        q ← readConsistency(ConsistencyLevel.ONE)
+      } yield q
+
+      val query = Join[CassandraProcess].join(qLang, LANGS, qProg, PROGRAMMERS, "world") { (l, r) ⇒
         s"Pk: ${l.getLong("id")} lang: ${l.getString("name")} name: ${r.getString(2)}"
       }
 
@@ -59,28 +60,32 @@ class JoinGCassandraSpec extends WordSpecLike with Matchers with CassandraEnviro
         _ ← row to Sink
       } yield ())
         .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); P.halt }
-        .onComplete { P.eval(Task.delay { client.close(); logger.debug("Interaction has been completed") }) }
+        .onComplete { P.eval(Task.delay { client.close; logger.debug("Join has been completed") }) }
         .runLog.run
 
-      logger.info("****Result:" + buffer)
-      if (buffer.size != 3) fail("Error in JoinG with CassandraProcessStream")
+      logger.info("Result:" + buffer)
+
+      if (buffer.size != 3) fail("Error in Join with CassandraProcess")
     }
   }
 
-  "JoinG with CassandraObservableStream" should {
+  "JoinG with CassandraObservable" should {
     "have run" in {
       val count = new CountDownLatch(1)
       val state = new AtomicReference(Vector[String]())
       implicit val client = Cluster.builder().addContactPointsWithPorts(cassandraHost).build
 
-      val qLang = for { q ← qFreeM("SELECT id, name FROM {0}") } yield q
-
-      def qProg(r: CRow) = for {
-        _ ← qFreeM("SELECT * FROM {0} WHERE lang = ? allow filtering")
-        q ← cParam[java.lang.Long]("id_lang", r.getLong("id"))
+      val qLang = for {
+        q ← select("SELECT id, name FROM {0}")
       } yield q
 
-      val query = JoinG[CassandraObservableStream].join(qLang, LANGS, qProg, PROGRAMMERS, "world") { (l, r) ⇒
+      def qProg(r: CRow) = for {
+        _ ← select("SELECT * FROM {0} WHERE lang = ? allow filtering")
+        _ ← fk[java.lang.Long]("id_lang", r.getLong("id"))
+        q ← readConsistency(ConsistencyLevel.ONE)
+      } yield q
+
+      val query = Join[CassandraObservable].join(qLang, LANGS, qProg, PROGRAMMERS, "world") { (l, r) ⇒
         s"Pk: ${l.getLong("id")} lang: ${l.getString("name")} name: ${r.getString(2)}"
       }
 
@@ -98,7 +103,7 @@ class JoinGCassandraSpec extends WordSpecLike with Matchers with CassandraEnviro
           count.countDown()
         }
         override def onCompleted() = {
-          logger.info("Interaction has been completed")
+          logger.info("Join has been completed")
           client.close()
           count.countDown()
         }
@@ -109,7 +114,7 @@ class JoinGCassandraSpec extends WordSpecLike with Matchers with CassandraEnviro
 
       count.await()
       logger.info("Result:" + state)
-      if (state.get().size != 3) fail("Error in JoinG with CassandraObservableStream")
+      if (state.get().size != 3) fail("Error in Join with CassandraObservable")
     }
   }
 }

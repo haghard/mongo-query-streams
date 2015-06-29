@@ -14,22 +14,23 @@
 
 package mongo.query.test
 
-import com.mongodb._
-import java.util.Date
 import java.util.Arrays._
-import java.util.concurrent.{ ThreadLocalRandom, TimeUnit, ExecutorService, Executors }
+import java.util.Date
+import java.util.concurrent.{ ExecutorService, Executors, ThreadLocalRandom, TimeUnit }
+
+import _root_.mongo.query.{ DBChannel, DBChannelFactory, QuerySetting }
+import _root_.mongo.{ NamedThreadFactory, query }
+import com.mongodb._
 import de.bwaldvogel.mongo.MongoServer
 import de.bwaldvogel.mongo.backend.memory.MemoryBackend
-import mongo.{ query, NamedThreadFactory }
-import mongo.query.{ DBChannel, DBChannelFactory, QuerySetting }
 import org.apache.log4j.Logger
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.{ Buffer, ArrayBuffer }
-import scalaz.stream.Process._
-import scalaz.{ -\/, \/-, \/ }
+import scala.collection.mutable.{ ArrayBuffer, Buffer }
 import scalaz.concurrent.Task
+import scalaz.stream.Process._
 import scalaz.stream._
+import scalaz.{ -\/, \/, \/- }
 
 object MongoIntegrationEnv {
   import process1._

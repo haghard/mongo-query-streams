@@ -62,7 +62,6 @@ trait CassandraEnviromentLifecycle extends BeforeAndAfterAll { this: Suite ⇒
 
   override protected def beforeAll(): Unit = {
     val f = new File(getClass.getClassLoader.getResource("cassandra_network_strategy.yaml").getPath)
-    f.exists()
     CassandraServerHelper.startEmbeddedCassandra(f, "./cas-tmp", 10.seconds.toMillis)
 
     val clusterBuilder = com.datastax.driver.core.Cluster.builder

@@ -15,8 +15,7 @@
 package mongo.query.test
 
 import mongo._
-import dsl._
-import qb._
+import dsl.mongo._
 import java.util.Date
 import mongo.query.create
 import scala.collection.mutable.ArrayBuffer
@@ -28,7 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import MongoIntegrationEnv.{ executor, ids, sinkWithBuffer, mock, TEST_DB, PRODUCT, CATEGORY }
 import org.specs2.mutable._
 
-trait TestEnviroment[T] extends org.specs2.mutable.After {
+trait MongoClientEnviromentLyfecycle[T] extends org.specs2.mutable.After {
   protected val logger = Logger.getLogger(classOf[IntegrationMongoClientSpec])
 
   val (sink, buffer) = sinkWithBuffer[T]
@@ -58,7 +57,7 @@ trait TestEnviroment[T] extends org.specs2.mutable.After {
 
 class IntegrationMongoClientSpec extends Specification {
 
-  "Hit server with invalid query" in new TestEnviroment[Int] {
+  "Hit server with invalid query" in new MongoClientEnviromentLyfecycle[Int] {
     val q = create { b ⇒
       b.q(""" { "num :  } """)
       b.db(TEST_DB)
@@ -76,7 +75,7 @@ class IntegrationMongoClientSpec extends Specification {
     isFailureInvoked.get && isFailureComplete.get must be equalTo true
   }
 
-  "Hit server with invalid query - missing collection" in new TestEnviroment[Int] {
+  "Hit server with invalid query - missing collection" in new MongoClientEnviromentLyfecycle[Int] {
     val q = create { b ⇒
       b.q(""" { "num" : 1 } """)
       b.db(TEST_DB)
@@ -93,7 +92,7 @@ class IntegrationMongoClientSpec extends Specification {
     isFailureInvoked.get && isFailureComplete.get must be equalTo true
   }
 
-  "Hit server with invalid query - invalid sorting" in new TestEnviroment[Int] {
+  "Hit server with invalid query - invalid sorting" in new MongoClientEnviromentLyfecycle[Int] {
     val q = create { b ⇒
       b.q(""" { "num" : 1 } """)
       b.sort(""" { "num } """) //invalid
@@ -112,7 +111,7 @@ class IntegrationMongoClientSpec extends Specification {
     isFailureInvoked.get && isFailureComplete.get must be equalTo true
   }
 
-  "Hit server with invalid query - missing db" in new TestEnviroment[Int] {
+  "Hit server with invalid query - missing db" in new MongoClientEnviromentLyfecycle[Int] {
     val q = create { b ⇒
       b.q(""" { "num" : 1 } """)
       b.collection(PRODUCT)
@@ -129,7 +128,7 @@ class IntegrationMongoClientSpec extends Specification {
     isFailureInvoked.get && isFailureComplete.get must be equalTo true
   }
 
-  "Hit server several times with the same query by date" in new TestEnviroment[Int] {
+  "Hit server several times with the same query by date" in new MongoClientEnviromentLyfecycle[Int] {
     val products = create { b ⇒
       b.q("dt" $gt new Date())
       b.collection(PRODUCT)
@@ -148,7 +147,7 @@ class IntegrationMongoClientSpec extends Specification {
 
     buffer must be equalTo (ids ++ ids ++ ids)
   }
-
+  /*
   "Hit server with monadic query to instructions" in new TestEnviroment[String] {
     val program = for {
       _ ← "article" $gt 0 $lt 4
@@ -170,8 +169,9 @@ class IntegrationMongoClientSpec extends Specification {
       .runLog.run
 
     buffer must be equalTo ArrayBuffer("1", "2")
-  }
+  }*/
 
+  /*
   "Hit server with monadic query2" in new TestEnviroment[String] {
     val producers = for {
       _ ← "article" $gt 0 $lt 4
@@ -193,9 +193,9 @@ class IntegrationMongoClientSpec extends Specification {
       .runLog.run
 
     buffer must be equalTo ArrayBuffer("1", "2")
-  }
+  }*/
 
-  "Interleave query streams nondeterminstically" in new TestEnviroment[String \/ Int] {
+  "Interleave query streams nondeterminstically" in new MongoClientEnviromentLyfecycle[String \/ Int] {
 
     val products = create { b ⇒
       b.q("article" $in Seq(1, 2, 3))

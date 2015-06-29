@@ -53,7 +53,7 @@ package object mongo {
     }
   }
 
-  sealed private[mongo] trait QueryBuilder {
+  sealed trait QueryBuilder {
     def q: BasicDBObject
   }
 
@@ -67,7 +67,7 @@ package object mongo {
     val One, Batch = Value
   }
 
-  private[mongo] trait QueryDsl extends scalaz.syntax.Ops[ComposableQueryFragment] {
+  trait QueryDsl extends scalaz.syntax.Ops[ComposableQueryFragment] {
 
     def field: String
 
@@ -90,15 +90,15 @@ package object mongo {
     def $nin[T: Values](vs: Iterable[T]) = self.copy(field, update(asJavaIterable(vs), "$nin"))
   }
 
-  private[mongo] case class EqQueryFragment(override val q: BasicDBObject) extends QueryBuilder
+  case class EqQueryFragment(override val q: BasicDBObject) extends QueryBuilder
 
-  private[mongo] case class ComposableQueryFragment(val field: String, val nested: Option[BasicDBObject]) extends QueryDsl with QueryBuilder {
+  case class ComposableQueryFragment(val field: String, val nested: Option[BasicDBObject]) extends QueryDsl with QueryBuilder {
     override val self = this
     override def q = new BasicDBObject(field, nested.fold(new BasicDBObject())(x ⇒ x))
     override def toString() = q.toString
   }
 
-  private[mongo] case class AndQueryFragment(cs: TraversableOnce[QueryBuilder]) extends QueryBuilder {
+  case class AndQueryFragment(cs: TraversableOnce[QueryBuilder]) extends QueryBuilder {
     override def q = new BasicDBObject("$and", cs.foldLeft(new java.util.ArrayList[DBObject]()) { (arr, c) ⇒
       arr.add(c.q)
       arr
@@ -106,7 +106,7 @@ package object mongo {
     override def toString() = q.toString
   }
 
-  private[mongo] case class OrQueryFragment(cs: TraversableOnce[QueryBuilder]) extends QueryBuilder {
+  case class OrQueryFragment(cs: TraversableOnce[QueryBuilder]) extends QueryBuilder {
     override def q = new BasicDBObject("$or", cs.foldLeft(new java.util.ArrayList[DBObject]()) { (arr, c) ⇒
       arr.add(c.q)
       arr

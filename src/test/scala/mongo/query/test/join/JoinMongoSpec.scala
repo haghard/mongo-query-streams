@@ -12,14 +12,14 @@
  * limitations under the License.
  */
 
-package mongo.query.test
+package mongo.query.test.join
 
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicLong
 
 import com.mongodb.DBObject
-import join.observable.MongoObservableStream
-import join.process.MongoProcessStream
+
+import mongo.query.test.{ MongoClientEnviromentLifecycle, MongoIntegrationEnv }
 import org.specs2.mutable.Specification
 import rx.lang.scala.Subscriber
 import rx.lang.scala.schedulers.ExecutionContextScheduler
@@ -29,26 +29,24 @@ import scala.concurrent.ExecutionContext
 import scalaz.concurrent.Task
 import scalaz.stream.{ Process, io }
 
-class JoinerGMongoSpec extends Specification {
-  import mongo._
-  import join._
-  import dsl._
-  import qb._
+class JoinMongoSpec extends Specification {
   import MongoIntegrationEnv._
+  import join.Join
+  import join.mongo.{ MongoProcess, MongoObservable }
+  import mongo._
+  import dsl.mongo._
 
-  "JoinG with MongoProcessStream" in new MongoEnviromentLifecycle {
+  "Join with MongoProcessStream" in new MongoClientEnviromentLifecycle {
     initMongo
 
     val buffer = Buffer.empty[String]
     val Sink = io.fillBuffer(buffer)
+    implicit val c = client
 
     val qLang = for { q ← "index" $gte 0 $lte 5 } yield q
     def qProg(left: DBObject) = for { q ← "lang" $eq left.get("index").asInstanceOf[Int] } yield q
 
-    implicit val c = client
-    val joiner = JoinG[MongoProcessStream]
-
-    val query = joiner.join(qLang, LANGS, qProg(_), PROGRAMMERS, TEST_DB) { (l, r) ⇒
+    val query = Join[MongoProcess].join(qLang, LANGS, qProg(_), PROGRAMMERS, TEST_DB) { (l, r) ⇒
       s"Primary-key:${l.get("index")} - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
     }
 
@@ -58,39 +56,36 @@ class JoinerGMongoSpec extends Specification {
     } yield ()
 
     p.run.run
+    logger.info("Join with MongoProcessStream result:" + buffer)
     buffer.size === 10
   }
 
-  "JoinG with MongoObservableStream" in new MongoEnviromentLifecycle {
+  "Join with MongoObservableStream" in new MongoClientEnviromentLifecycle {
     initMongo
 
-    val buffer = Buffer.empty[String]
-    val Sink = io.fillBuffer(buffer)
+    implicit val c = client
 
     val qLang = for { q ← "index" $gte 0 $lte 5 } yield q
     def qProg(left: DBObject) = for { q ← "lang" $eq left.get("index").asInstanceOf[Int] } yield q
 
-    implicit val c = client
-    val joiner = JoinG[MongoObservableStream]
-    //
-    val query = joiner.join(qLang, LANGS, qProg(_), PROGRAMMERS, TEST_DB) { (l, r) ⇒
+    val query = Join[MongoObservable].join(qLang, LANGS, qProg(_), PROGRAMMERS, TEST_DB) { (l, r) ⇒
       s"Primary-key:${l.get("index")} - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
     }
 
     val count = new CountDownLatch(1)
     val responses = new AtomicLong(0)
     val testSubs = new Subscriber[String] {
-      override def onStart(): Unit = request(1)
-      override def onNext(n: String): Unit = {
+      override def onStart() = request(1)
+      override def onNext(n: String) = {
         logger.info(s"receive $n")
         responses.incrementAndGet()
         request(1)
       }
-      override def onError(e: Throwable): Unit = {
+      override def onError(e: Throwable) = {
         logger.info(s"OnError: ${e.getMessage}")
         count.countDown()
       }
-      override def onCompleted(): Unit = {
+      override def onCompleted() = {
         logger.info("Interaction has been completed")
         count.countDown()
       }
@@ -103,4 +98,3 @@ class JoinerGMongoSpec extends Specification {
     responses.get === 10
   }
 }
-
