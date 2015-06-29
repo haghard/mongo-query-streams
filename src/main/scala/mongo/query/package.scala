@@ -249,12 +249,12 @@ package object query {
 
   //default
   implicit object default extends DBChannelFactory[MongoClient] {
-    override def createChannel(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[MongoClient, DBObject] = {
+    override def createChannel(arg: String \/ QuerySetting)(implicit s: ExecutorService): DBChannel[MongoClient, DBObject] = {
       arg match {
         case \/-(qs) ⇒
-          DBChannel(eval(Task now { client: MongoClient ⇒
+          DBChannel(eval(Task.now { client: MongoClient ⇒
             Task {
-              val logger = Logger.getLogger("query")
+              val logger = Logger.getLogger("mongo-streamer")
               scalaz.stream.io.resource(
                 Task delay {
                   val collection = client.getDB(qs.db).getCollection(qs.cName)
@@ -265,20 +265,16 @@ package object query {
                   qs.limit.foreach(n ⇒ cursor.limit(n))
                   qs.maxTimeMS.foreach(cursor.maxTime(_, TimeUnit.MILLISECONDS))
                   val rpLine = qs.readPref.fold("Empty") { p ⇒ p.asMongoDbReadPreference.toString }
-                  logger.debug(s"Query:[${qs.q}] ReadPref:[$rpLine}] Sort:[${qs.sortQuery}] Limit:[${qs.limit}] Skip:[${qs.skip}]")
+                  logger.debug(s"Query:[${qs.q}] ReadPrefs:[$rpLine}] Sort:[${qs.sortQuery}] Limit:[${qs.limit}] Skip:[${qs.skip}]")
                   cursor
                 })(c ⇒ Task.delay(c.close())) { c ⇒
                   Task.delay {
                     if (c.hasNext) c.next
-                    else {
-                      logger.debug(s"Cursor: ${c.##} is exhausted")
-                      throw Cause.Terminated(Cause.End)
-                    }
+                    else throw Cause.Terminated(Cause.End)
                   }
                 }
             }
           }))
-
         case -\/(error) ⇒ DBChannel(eval(Task.fail(new MongoException(error))))
       }
     }
