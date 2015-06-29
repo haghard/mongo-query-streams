@@ -17,7 +17,7 @@ First, you will need to add the Bintray resolver settings to your SBT file:
 ```
 and
  ```scala
-   libraryDependencies += "org.mongo.scalaz"    %% "mongo-query-streams" %  "0.6.6"   
+   libraryDependencies += "org.mongo.scalaz"    %% "mongo-query-streams" %  "0.6.7"   
  ```
 
 Examples
@@ -252,4 +252,4 @@ Generated files can be found in /target/spec2-reports
 
 Status
 ------
-0.6.6 version
+0.6.7 version
