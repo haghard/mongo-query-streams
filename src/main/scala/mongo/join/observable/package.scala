@@ -73,7 +73,7 @@ package object observable {
 
     class QueryProducer[T](val subscriber: Subscriber[T], val db: String, val coll: String,
                            val q: MongoObservableStream#DBRecord, val c: MongoObservableStream#Client, val log: Logger) extends Producer {
-      self: { def fetch(n: Long) } ⇒
+      self: Fetcher[T] ⇒
       override def request(n: Long) = fetch(n)
     }
 

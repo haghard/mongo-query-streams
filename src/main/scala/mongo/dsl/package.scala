@@ -261,7 +261,7 @@ package object dsl { outer ⇒
       }
 
       implicit object RxStreamer extends Streamer[Observable] {
-        import com.mongodb.{MongoClient, DBCursor}
+        import com.mongodb.{ MongoClient, DBCursor }
         override def create[T](qs: QuerySettings, client: MongoClient, db: String, collection: String)(implicit pool: ExecutorService): Observable[T] = {
           Observable { subscriber: Subscriber[T] ⇒
             subscriber.setProducer(new Producer() {
