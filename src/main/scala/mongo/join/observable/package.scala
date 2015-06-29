@@ -53,7 +53,7 @@ package object observable {
       }).get
 
       @tailrec private def go(n: Long): Unit = {
-        log.info(s"${##} request $n")
+        log.info(s"request $n")
         if (n > 0) {
           if (cursor.find(_.hasNext).isDefined) {
             subscriber.onNext(extract(cursor.get))
@@ -93,13 +93,6 @@ package object observable {
         }.subscribeOn(scheduler)
       }
 
-      private def resourceR[A](q: MongoObservableStream#DBRecord, db: String, coll: String): Observable[A] = {
-        log.info(s"[$db - $coll] Query: $q")
-        Observable { subscriber: Subscriber[A] ⇒
-          subscriber.setProducer(new QueryProducer[A](subscriber, db, coll, q, client, log) with Fetcher[A])
-        }.subscribeOn(scheduler)
-      }
-
       private def typedResource[A](q: MongoObservableStream#QuerySettings, db: String, coll: String, keyField: String): Observable[A] = {
         log.info(s"[$db - $coll] Query: $q")
         Observable { subscriber: Subscriber[A] ⇒
@@ -108,52 +101,41 @@ package object observable {
           })
         }.subscribeOn(scheduler)
       }
+      
+      override def leftField[A](query: QueryFree[MongoObservableStream#QuerySettings],
+                                db: String, collection: String, key: String): MongoObservableStream#DBStream[A] =
+        typedResource[A](createQuery(query), db, collection, key)
+
+      
+      override def left(query: QueryFree[MongoObservableStream#QuerySettings],
+                        db: String, collection: String): Observable[MongoObservableStream#DBRecord] =
+        resource[MongoObservableStream#DBRecord](createQuery(query), db, collection)
 
       /**
        *
-       * @param q
+       * @param relation
        * @param db
-       * @param coll
-       * @param key
-       * @tparam A
-       * @return
-       */
-      override def leftField[A](q: QueryFree[MongoObservableStream#QuerySettings], db: String, coll: String, key: String): MongoObservableStream#DBStream[A] =
-        typedResource[A](createQuery(q), db, coll, key)
-
-      /**
-       *
-       * @param q
-       * @param db
-       * @param coll
-       * @return
-       */
-      override def left(q: QueryFree[MongoObservableStream#QuerySettings], db: String, coll: String): Observable[MongoObservableStream#DBRecord] =
-        resource[MongoObservableStream#DBRecord](createQuery(q), db, coll)
-
-      /**
-       *
-       * @param r
-       * @param db
-       * @param coll
+       * @param collection
        * @tparam A
        * @tparam B
-       * @return
+       * @return (A ⇒ MongoObservableStream#DBStream[B])
        */
-      override def relationField[A, B](r: (A) ⇒ QueryFree[MongoObservableStream#QuerySettings], db: String, coll: String): (A) ⇒ MongoObservableStream#DBStream[B] =
+      override def relationField[A, B](relation: (A) ⇒ QueryFree[MongoObservableStream#QuerySettings],
+                                       db: String, collection: String): (A) ⇒ MongoObservableStream#DBStream[B] =
         id ⇒
-          resource[B](createQuery(r(id)), db, coll)
+          resource[B](createQuery(relation(id)), db, collection)
 
       /**
        *
        * @param r
        * @param db
-       * @param coll
+       * @param collection
        * @return
        */
-      override def relation(r: (MongoObservableStream#DBRecord) ⇒ QueryFree[MongoObservableStream#QuerySettings], db: String, coll: String): (MongoObservableStream#DBRecord) ⇒ Observable[MongoObservableStream#DBRecord] =
+      override def relation(r: (MongoObservableStream#DBRecord) ⇒ QueryFree[MongoObservableStream#QuerySettings],
+                            db: String, collection: String): (MongoObservableStream#DBRecord) ⇒ Observable[MongoObservableStream#DBRecord] =
         id ⇒
-          resource[MongoObservableStream#DBRecord](createQuery(r(id)), db, coll)
+          resource[MongoObservableStream#DBRecord](createQuery(r(id)), db, collection)
 
       override def innerJoin[A, B, C](left: Observable[A])(relation: (A) ⇒ Observable[B])(f: (A, B) ⇒ C): MongoObservableStream#DBStream[C] =
         for {
@@ -165,11 +147,9 @@ package object observable {
 
   implicit class ObservableSyntax[T](val self: Observable[T]) extends AnyVal {
     def column[B](name: String): Observable[B] =
-      self.map { record ⇒
-        record match {
-          case r: MongoObservableStream#DBRecord ⇒ r.get(name).asInstanceOf[B]
-          case other                             ⇒ throw new com.mongodb.MongoException(s"DBObject expected but found ${other.getClass.getName}")
-        }
+      self map {
+        case r: MongoObservableStream#DBRecord ⇒ r.get(name).asInstanceOf[B]
+        case other                             ⇒ throw new com.mongodb.MongoException(s"DBObject expected but found ${other.getClass.getName}")
       }
 
     def innerJoin[E, C](f: T ⇒ Observable[E])(m: (T, E) ⇒ C): Observable[C] =

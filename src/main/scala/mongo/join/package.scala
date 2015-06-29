@@ -50,9 +50,9 @@ package object join {
    * @tparam T
    */
   abstract class Joiner[T <: DBModule] {
-    protected var log: Logger = null
+    protected var log: Logger = _
     protected var client: T#Client = _
-    protected var exec: ExecutorService = null
+    protected var exec: ExecutorService = _
     private val initQ = new com.mongodb.BasicDBObject
     private val init = QuerySettings(initQ)
 
@@ -80,43 +80,43 @@ package object join {
 
     /**
      *
-     * @param q
+     * @param query
      * @param db
-     * @param coll
+     * @param collection
      * @param keyField
      * @tparam A
      * @return
      */
-    def leftField[A](q: qb.QueryFree[T#QuerySettings], db: String, coll: String, keyField: String): T#DBStream[A]
+    def leftField[A](query: qb.QueryFree[T#QuerySettings], db: String, collection: String, keyField: String): T#DBStream[A]
 
     /**
      *
-     * @param q
+     * @param query
      * @param db
-     * @param coll
+     * @param collection
      * @return
      */
-    def left(q: qb.QueryFree[T#QuerySettings], db: String, coll: String): T#DBStream[T#DBRecord]
+    def left(query: qb.QueryFree[T#QuerySettings], db: String, collection: String): T#DBStream[T#DBRecord]
 
     /**
      *
-     * @param r
+     * @param relation
      * @param db
-     * @param collectionName
+     * @param collection
      * @tparam A
      * @tparam B
-     * @return
+     * @return A ⇒ T#DBStream[B]
      */
-    def relationField[A, B](r: A ⇒ qb.QueryFree[T#QuerySettings], db: String, collectionName: String): A ⇒ T#DBStream[B]
+    def relationField[A, B](relation: A ⇒ qb.QueryFree[T#QuerySettings], db: String, collection: String): A ⇒ T#DBStream[B]
 
     /**
      *
-     * @param r
+     * @param relation
      * @param db
-     * @param collectionName
-     * @return
+     * @param collection
+     * @return T#DBRecord ⇒ T#DBStream[T#DBRecord]
      */
-    def relation(r: T#DBRecord ⇒ qb.QueryFree[T#QuerySettings], db: String, collectionName: String): T#DBRecord ⇒ T#DBStream[T#DBRecord]
+    def relation(relation: T#DBRecord ⇒ qb.QueryFree[T#QuerySettings], db: String, collection: String): T#DBRecord ⇒ T#DBStream[T#DBRecord]
 
     /**
      *
@@ -126,7 +126,7 @@ package object join {
      * @tparam A
      * @tparam B
      * @tparam C
-     * @return
+     * @return T#DBStream[C]
      */
     def innerJoin[A, B, C](l: T#DBStream[A])(relation: A ⇒ T#DBStream[B])(f: (A, B) ⇒ C): T#DBStream[C]
   }
@@ -151,7 +151,7 @@ package object join {
      * @param db Function for transform result
      * @param f Function for transform result
      * @tparam A Type for output value
-     * @return
+     * @return T#DBStream[A]
      */
     def join[A](leftQ: QueryFree[T#QuerySettings], leftCollection: String,
                 rightQ: T#DBRecord ⇒ QueryFree[T#QuerySettings], rightCollection: String,
@@ -171,7 +171,7 @@ package object join {
      * @tparam A Type for element from left stream
      * @tparam B Type for element from right stream
      * @tparam C Type for output value
-     * @return
+     * @return T#DBStream[C]
      */
     def joinByPk[A, B, C](leftQ: QueryFree[T#QuerySettings], leftCollection: String, key: String,
                           rightQ: A ⇒ QueryFree[T#QuerySettings], rightCollection: String,
