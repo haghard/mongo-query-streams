@@ -15,10 +15,8 @@
 package mongo.query.test
 
 import mongo._
-import dsl.mongo._
 import java.util.Date
 import mongo.query.create
-import scala.collection.mutable.ArrayBuffer
 import scalaz.\/
 import scalaz.concurrent.Task
 import org.apache.log4j.Logger
@@ -147,56 +145,8 @@ class IntegrationMongoClientSpec extends Specification {
 
     buffer must be equalTo (ids ++ ids ++ ids)
   }
-  /*
-  "Hit server with monadic query to instructions" in new TestEnviroment[String] {
-    val program = for {
-      _ ← "article" $gt 0 $lt 4
-      x ← "producer_num" $gt 0
-    } yield x
-
-    val products = create { b ⇒
-      b.q(program.toQuery)
-      b.collection(PRODUCT)
-      b.db(TEST_DB)
-    }.column[Int]("article").map(_.toString)
-
-    (for {
-      dbObject ← Resource through products.out
-      _ ← dbObject observe EnvLogger to sink
-    } yield ())
-      .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
-      .onComplete { eval(Task.delay(logger.debug(s"Interaction has been completed"))) }
-      .runLog.run
-
-    buffer must be equalTo ArrayBuffer("1", "2")
-  }*/
-
-  /*
-  "Hit server with monadic query2" in new TestEnviroment[String] {
-    val producers = for {
-      _ ← "article" $gt 0 $lt 4
-      x ← "producer_num" $gt 0
-    } yield x
-
-    val products = create { b ⇒
-      b.q(producers.toDBObject)
-      b.collection(PRODUCT)
-      b.db(TEST_DB)
-    }.column[Int]("article").map(_.toString)
-
-    (for {
-      dbObject ← Resource through products.out
-      _ ← dbObject observe EnvLogger to sink
-    } yield ())
-      .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
-      .onComplete { eval(Task.delay(logger.debug(s"Interaction has been completed"))) }
-      .runLog.run
-
-    buffer must be equalTo ArrayBuffer("1", "2")
-  }*/
 
   "Interleave query streams nondeterminstically" in new MongoClientEnviromentLyfecycle[String \/ Int] {
-
     val products = create { b ⇒
       b.q("article" $in Seq(1, 2, 3))
       b.collection(PRODUCT)
