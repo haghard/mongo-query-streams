@@ -86,17 +86,17 @@ package object observable {
     implicit object joiner extends Joiner[MongoObservableStream] {
       val scheduler = ExecutionContextScheduler(ExecutionContext.fromExecutor(exec))
 
-      private def resource[A](q: MongoObservableStream#QuerySettings, db: String, coll: String): Observable[A] = {
-        log.info(s"[$db - $coll] Query: $q")
+      private def resource[A](q: MongoObservableStream#QuerySettings, db: String, collection: String): Observable[A] = {
+        log.info(s"[$db - $collection] Query: $q")
         Observable { subscriber: Subscriber[A] ⇒
-          subscriber.setProducer(new QueryProducer[A](subscriber, db, coll, q.q, client, log) with Fetcher[A])
+          subscriber.setProducer(new QueryProducer[A](subscriber, db, collection, q.q, client, log) with Fetcher[A])
         }.subscribeOn(scheduler)
       }
 
-      private def typedResource[A](q: MongoObservableStream#QuerySettings, db: String, coll: String, keyField: String): Observable[A] = {
-        log.info(s"[$db - $coll] Query: $q")
+      private def typedResource[A](q: MongoObservableStream#QuerySettings, db: String, collection: String, keyField: String): Observable[A] = {
+        log.info(s"[$db - $collection] Query: $q")
         Observable { subscriber: Subscriber[A] ⇒
-          subscriber.setProducer(new QueryProducer[A](subscriber, db, coll, q.q, client, log) with PKFetcher[A] {
+          subscriber.setProducer(new QueryProducer[A](subscriber, db, collection, q.q, client, log) with PKFetcher[A] {
             override val key = keyField
           })
         }.subscribeOn(scheduler)
