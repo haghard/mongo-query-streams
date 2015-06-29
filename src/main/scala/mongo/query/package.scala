@@ -25,7 +25,7 @@ import scalaz.Scalaz._
 import scalaz.stream.Process._
 import scalaz.stream.process1._
 
-package object query { self ⇒
+package object query {
 
   import com.mongodb.{ DBObject, MongoClient, MongoException }
 
@@ -39,7 +39,7 @@ package object query { self ⇒
     def createChannel(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[T, com.mongodb.DBObject]
   }
 
-  case class DBChannel[T, A](val out: ResponseChannel[T, A]) {
+  case class DBChannel[T, A](out: ResponseChannel[T, A]) {
 
     private def liftP[B](f: Process[Task, A] ⇒ Process[Task, B]): DBChannel[T, B] =
       DBChannel { out.map(step ⇒ step.andThen(task ⇒ task.map(p ⇒ f(p)))) }
@@ -49,7 +49,6 @@ package object query { self ⇒
     def |>[B](p2: Process1[A, B]): DBChannel[T, B] = pipe(p2)
 
     /**
-     *
      * @param f
      * @tparam B
      * @return
@@ -57,7 +56,6 @@ package object query { self ⇒
     def map[B](f: A ⇒ B): DBChannel[T, B] = liftP(_.map(f))
 
     /**
-     *
      * @param f
      * @tparam B
      * @return
@@ -116,8 +114,6 @@ package object query { self ⇒
       liftP { p ⇒ p.tee(other)(t) }
 
     /**
-     *
-     *
      * Interleave or combine the outputs of two processes in nondeterministic fashion.
      * It's useful when you want mix results from 2 query stream
      * @param other
@@ -177,11 +173,9 @@ package object query { self ⇒
      * @return DBChannel[T, B]
      */
     def column[B](name: String): DBChannel[T, B] = {
-      pipe(lift { record ⇒
-        record match {
-          case r: DBObject ⇒ r.get(name).asInstanceOf[B]
-          case other       ⇒ throw new Exception(s"DatabaseObject expected but found ${other.getClass.getName}")
-        }
+      pipe(lift {
+        case r: DBObject ⇒ r.get(name).asInstanceOf[B]
+        case other       ⇒ throw new Exception(s"DatabaseObject expected but found ${other.getClass.getName}")
       })
     }
   }
@@ -250,7 +244,7 @@ package object query { self ⇒
     override def createChannel(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[MongoClient, DBObject] = {
       arg match {
         case \/-(qs) ⇒
-          DBChannel(eval(Task now { client: MongoClient ⇒
+          DBChannel(eval(Task.now { client: MongoClient ⇒
             Task {
               val logger = Logger.getLogger("mongo-streamer")
               scalaz.stream.io.resource(
@@ -263,20 +257,16 @@ package object query { self ⇒
                   qs.limit.foreach(cursor.limit(_))
                   qs.maxTimeMS.foreach(cursor.maxTime(_, TimeUnit.MILLISECONDS))
                   val rpLine = qs.readPref.fold("Empty") { p ⇒ p.asMongoDbReadPreference.toString }
-                  logger.debug(s"Cursor:${cursor.##} ReadPref:[$rpLine}] Server:[${cursor.getServerAddress}] Sort:[${qs.sortQuery}] Limit:[${qs.limit}] Skip:[${qs.skip}] Query:[${qs.q}]")
+                  logger.debug(s"Query:[${qs.q}] ReadPrefs:[$rpLine}] Server:[${cursor.getServerAddress}] Sort:[${qs.sortQuery}] Limit:[${qs.limit}] Skip:[${qs.skip}]")
                   cursor
-                })(c ⇒ Task.delay(c.close)) { c ⇒
+                })(c ⇒ Task.delay(c.close())) { c ⇒
                   Task.delay {
                     if (c.hasNext) c.next
-                    else {
-                      logger.debug(s"Cursor: ${c.##} is exhausted")
-                      throw Cause.Terminated(Cause.End)
-                    }
+                    else throw Cause.Terminated(Cause.End)
                   }
                 }
             }
           }))
-
         case -\/(error) ⇒ DBChannel(eval(Task.fail(new MongoException(error))))
       }
     }
