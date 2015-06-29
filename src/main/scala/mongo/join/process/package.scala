@@ -38,9 +38,9 @@ package object process {
         io.resource(Task.delay {
           val coll = client.getDB(db).getCollection(collection)
           val cursor = coll.find(qs.q)
-          qs.sort.foreach(q=>cursor.sort(q))
-          qs.skip.foreach(n=>cursor.skip(n))
-          qs.limit.foreach(n=>cursor.limit(n))
+          qs.sort.foreach(q ⇒ cursor.sort(q))
+          qs.skip.foreach(n ⇒ cursor.skip(n))
+          qs.limit.foreach(n ⇒ cursor.limit(n))
           log.debug(s"Query-settings: Sort:[ ${qs.sort} ] Skip:[ ${qs.skip} ] Limit:[ ${qs.limit} ] Query:[ ${qs.q} ]")
           cursor
         })(c ⇒ Task.delay(c.close())) { c ⇒

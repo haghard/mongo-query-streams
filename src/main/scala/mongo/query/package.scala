@@ -14,18 +14,18 @@
 
 package mongo
 
-import org.apache.log4j.Logger
+import scalaz.Scalaz._
+import scalaz.stream._
 import scalaz.concurrent.Task
+import org.apache.log4j.Logger
 import scalaz.{ -\/, \/, \/- }
 import scala.util.{ Failure, Success, Try }
-import scalaz.stream._
 import java.util.concurrent.{ ExecutorService, TimeUnit }
 import com.mongodb.{ DBObject, MongoClient, MongoException }
-import scalaz.Scalaz._
 import scalaz.stream.Process._
 import scalaz.stream.process1._
 
-package object query { self ⇒
+package object query {
 
   type MongoChannel[T, A] = Channel[Task, T, Process[Task, A]]
 
@@ -40,10 +40,10 @@ package object query { self ⇒
   /**
    *
    * @param out MongoChannel[T, A]
-   * @tparam T - MongoClient or Db
-   * @tparam A
+   * @tparam T MongoClient or Db
+   * @tparam A DBObject
    */
-  case class DBChannel[T, A](val out: MongoChannel[T, A]) {
+  case class DBChannel[T, A](out: MongoChannel[T, A]) {
 
     private def liftP[B](f: Process[Task, A] ⇒ Process[Task, B]): DBChannel[T, B] =
       DBChannel { out.map(step ⇒ step.andThen(task ⇒ task.map(p ⇒ f(p)))) }
@@ -181,11 +181,9 @@ package object query { self ⇒
      * @return DBChannel[T, B]
      */
     def column[B](name: String): DBChannel[T, B] = {
-      pipe(lift { record ⇒
-        record match {
-          case r: DBObject ⇒ r.get(name).asInstanceOf[B]
-          case other       ⇒ throw new MongoException(s"DBObject expected but found ${other.getClass.getName}")
-        }
+      pipe(lift {
+        case r: DBObject ⇒ r.get(name).asInstanceOf[B]
+        case other       ⇒ throw new MongoException(s"DBObject expected but found ${other.getClass.getName}")
       })
     }
   }
@@ -262,14 +260,14 @@ package object query { self ⇒
                   val collection = client.getDB(qs.db).getCollection(qs.cName)
                   var cursor = collection.find(qs.q)
                   cursor = qs.readPref.fold(cursor) { p ⇒ cursor.setReadPreference(p.asMongoDbReadPreference) }
-                  qs.sortQuery.foreach(cursor.sort(_))
-                  qs.skip.foreach(cursor.skip(_))
-                  qs.limit.foreach(cursor.limit(_))
+                  qs.sortQuery.foreach(q ⇒ cursor.sort(q))
+                  qs.skip.foreach(n ⇒ cursor.skip(n))
+                  qs.limit.foreach(n ⇒ cursor.limit(n))
                   qs.maxTimeMS.foreach(cursor.maxTime(_, TimeUnit.MILLISECONDS))
                   val rpLine = qs.readPref.fold("Empty") { p ⇒ p.asMongoDbReadPreference.toString }
-                  logger.debug(s"Cursor:${cursor.##} ReadPref:[$rpLine}] Server:[${cursor.getServerAddress}] Sort:[${qs.sortQuery}] Limit:[${qs.limit}] Skip:[${qs.skip}] Query:[${qs.q}]")
+                  logger.debug(s"Query:[${qs.q}] ReadPref:[$rpLine}] Sort:[${qs.sortQuery}] Limit:[${qs.limit}] Skip:[${qs.skip}]")
                   cursor
-                })(c ⇒ Task.delay(c.close)) { c ⇒
+                })(c ⇒ Task.delay(c.close())) { c ⇒
                   Task.delay {
                     if (c.hasNext) c.next
                     else {
