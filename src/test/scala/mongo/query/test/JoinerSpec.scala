@@ -76,7 +76,7 @@ class JoinerSpec extends Specification {
     implicit val c = client
     val joiner = Join[MongoProcess]
 
-    val query = joiner.join(qLang, LANGS, qProg(_), PROGRAMMERS, TEST_DB) { (l, r) ⇒
+    val query = joiner.join(qLang, LANGS, qProg(_: DBObject), PROGRAMMERS, TEST_DB) { (l, r) ⇒
       s"Primary-key:${l.get("index")} - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
     }
 
@@ -97,8 +97,6 @@ class JoinerSpec extends Specification {
 
     val count = new CountDownLatch(1)
     val responses = new AtomicLong(0)
-    val buffer = Buffer.empty[String]
-    val Sink = io.fillBuffer(buffer)
 
     val qLang = for { q ← "index" $gte 0 $lte 5 } yield q
     def qProg(id: Int) = for { q ← "lang" $eq id } yield q
@@ -142,8 +140,6 @@ class JoinerSpec extends Specification {
 
     val count = new CountDownLatch(1)
     val responses = new AtomicLong(0)
-    val buffer = Buffer.empty[String]
-    val Sink = io.fillBuffer(buffer)
 
     val qLang = for { q ← "index" $gte 0 $lte 5 } yield q
     def qProg(left: DBObject) = for { q ← "lang" $eq left.get("index").asInstanceOf[Int] } yield q
@@ -151,7 +147,7 @@ class JoinerSpec extends Specification {
     implicit val c = client
     val joiner = Join[MongoObservable]
 
-    val query = joiner.join(qLang, LANGS, qProg(_), PROGRAMMERS, TEST_DB) { (l, r) ⇒
+    val query = joiner.join(qLang, LANGS, qProg(_ :DBObject), PROGRAMMERS, TEST_DB) { (l, r) ⇒
       s"Primary-key:${l.get("index")} - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
     }
 
