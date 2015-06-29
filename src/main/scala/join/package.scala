@@ -26,7 +26,10 @@ package object join {
   trait StorageModule {
     type Record
     type ReadSettings
-    type Cursor
+    type Cursor <: {
+      def hasNext(): Boolean
+      def next(): Record
+    }
     type Client
 
     type Stream[A] <: {
@@ -42,13 +45,13 @@ package object join {
 
     def join[A](leftQ: QFree[T#ReadSettings], lCollection: String,
                 rightQ: T#Record ⇒ QFree[T#ReadSettings], rCollection: String,
-                resourceName: String)(f: (T#Record, T#Record) ⇒ A): T#Stream[A] = {
+                resource: String)(f: (T#Record, T#Record) ⇒ A): T#Stream[A] = {
 
       val joiner = Joiner[T]
       val storage = Storage[T]
 
-      val left = storage.outerR(leftQ, lCollection, resourceName, logger, pool)(client)
-      val right = storage.innerR(rightQ, rCollection, resourceName, logger, pool)(client)
+      val left = storage.outerR(leftQ, lCollection, resource, logger, pool)(client)
+      val right = storage.innerR(rightQ, rCollection, resource, logger, pool)(client)
 
       joiner.join[T#Record, T#Record, A](left)(right)(f)
     }
