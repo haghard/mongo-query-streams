@@ -36,7 +36,7 @@ class JoinMongoSpec extends Specification {
   import mongo._
   import dsl.mongo._
 
-  "Join with MongoProcessStream" in new MongoClientEnviromentLifecycle {
+  "Join with MongoProcess" in new MongoClientEnviromentLifecycle {
     initMongo
 
     val buffer = Buffer.empty[String]
@@ -60,7 +60,7 @@ class JoinMongoSpec extends Specification {
     buffer.size === 10
   }
 
-  "Join with MongoObservableStream" in new MongoClientEnviromentLifecycle {
+  "Join with MongoObservable" in new MongoClientEnviromentLifecycle {
     initMongo
 
     implicit val c = client
