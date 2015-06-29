@@ -289,7 +289,7 @@ package object dsl { outer ⇒
                     logger.info(s"fetch $r")
                     subscriber.onNext(r)
                     go(n - 1)
-                  } else subscriber.onCompleted
+                  } else subscriber.onCompleted()
                 }
               }
 
@@ -324,24 +324,24 @@ package object dsl { outer ⇒
      *
      * @param client
      * @param db
-     * @param coll
+     * @param collection
      * @param pool
      * @return
      */
-    def findOne(client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService) =
-      Task(program(self, client, db, coll, FetchMode.One)
+    def findOne(client: MongoClient, db: String, collection: String)(implicit pool: ExecutorService) =
+      Task(program(self, client, db, collection, FetchMode.One)
         .foldMap(Trampolined compose intInterpreterCoyo).run)(pool)
 
     /**
      *
      * @param client
      * @param db
-     * @param coll
+     * @param collection
      * @param pool
      * @return
      */
-    def list(client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): Task[NonEmptyResult] =
-      Task(program(self, client, db, coll, FetchMode.Batch)
+    def list(client: MongoClient, db: String, collection: String)(implicit pool: ExecutorService): Task[NonEmptyResult] =
+      Task(program(self, client, db, collection, FetchMode.Batch)
         .foldMap(Trampolined compose intInterpreterCoyo).run)(pool)
 
     /**
@@ -349,19 +349,19 @@ package object dsl { outer ⇒
      *
      *
      * @param db
-     * @param coll
+     * @param collection
      * @param pool
      * @tparam M
      * @return
      */
-    def sChannel[M[_]: ChannelStreamer](db: String, coll: String)(implicit pool: ExecutorService): M[DBObject] =
+    def sChannel[M[_]: ChannelStreamer](db: String, collection: String)(implicit pool: ExecutorService): M[DBObject] =
       implicitly[ChannelStreamer[M]].create(
-        runFC[qb.StatementOp, QueryS, QuerySettings](self)(qb.QueryInterpreter).run(outer.qb.init)._1, db, coll)
+        runFC[StatementOp, QueryS, QuerySettings](self)(QueryInterpreter).run(outer.qb.init)._1, db, collection)
 
     /**
      * Works with [[mongo.dsl.MProcess]], [[rx.lang.scala.Observable]] types
      * @param db
-     * @param coll
+     * @param collection
      * @param pool
      * @param client
      * @tparam M
@@ -369,9 +369,9 @@ package object dsl { outer ⇒
      */
     //M[_]: scalaz.Monad
     //val m = implicitly[scalaz.Monad[M]]
-    def stream[M[_]: Streamer](db: String, coll: String)(implicit pool: ExecutorService, client: MongoClient): M[DBObject] = {
+    def stream[M[_]: Streamer](db: String, collection: String)(implicit pool: ExecutorService, client: MongoClient): M[DBObject] = {
       implicitly[Streamer[M]].create(
-        (runFC[qb.StatementOp, QueryS, QuerySettings](self)(qb.QueryInterpreter)).run(outer.qb.init)._1, client, db, coll)
+        runFC[StatementOp, QueryS, QuerySettings](self)(QueryInterpreter).run(outer.qb.init)._1, client, db, collection)
     }
   }
 }

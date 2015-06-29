@@ -148,7 +148,7 @@ package object observable {
     def column[B](name: String): Observable[B] =
       self map {
         case r: MongoObservable#DBRecord ⇒ r.get(name).asInstanceOf[B]
-        case other                             ⇒ throw new com.mongodb.MongoException(s"DBObject expected but found ${other.getClass.getName}")
+        case other                       ⇒ throw new com.mongodb.MongoException(s"DBObject expected but found ${other.getClass.getName}")
       }
 
     def innerJoin[E, C](f: T ⇒ Observable[E])(m: (T, E) ⇒ C): Observable[C] =

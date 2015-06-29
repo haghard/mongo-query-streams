@@ -147,7 +147,7 @@ class JoinerSpec extends Specification {
     implicit val c = client
     val joiner = Join[MongoObservable]
 
-    val query = joiner.join(qLang, LANGS, qProg(_ :DBObject), PROGRAMMERS, TEST_DB) { (l, r) ⇒
+    val query = joiner.join(qLang, LANGS, qProg(_: DBObject), PROGRAMMERS, TEST_DB) { (l, r) ⇒
       s"Primary-key:${l.get("index")} - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
     }
 
