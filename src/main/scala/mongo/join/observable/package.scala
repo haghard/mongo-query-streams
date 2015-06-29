@@ -101,12 +101,11 @@ package object observable {
           })
         }.subscribeOn(scheduler)
       }
-      
+
       override def leftField[A](query: QueryFree[MongoObservableStream#QuerySettings],
                                 db: String, collection: String, key: String): MongoObservableStream#DBStream[A] =
         typedResource[A](createQuery(query), db, collection, key)
 
-      
       override def left(query: QueryFree[MongoObservableStream#QuerySettings],
                         db: String, collection: String): Observable[MongoObservableStream#DBRecord] =
         resource[MongoObservableStream#DBRecord](createQuery(query), db, collection)

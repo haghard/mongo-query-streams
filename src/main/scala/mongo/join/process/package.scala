@@ -33,16 +33,17 @@ package object process {
     val P = scalaz.stream.Process
 
     implicit object joiner extends Joiner[MongoProcessStream] {
-      private def resource[T](qs: MongoProcessStream#QuerySettings, client: MongoProcessStream#Client, db: String, collection: String): Process[Task, T] = {
+      private def resource[T](qs: MongoProcessStream#QuerySettings, client: MongoProcessStream#Client,
+                              db: String, collection: String): Process[Task, T] = {
         io.resource(Task.delay {
           val coll = client.getDB(db).getCollection(collection)
           val cursor = coll.find(qs.q)
-          qs.sort.foreach(cursor.sort(_))
-          qs.skip.foreach(cursor.skip(_))
-          qs.limit.foreach(cursor.limit(_))
+          qs.sort.foreach(q=>cursor.sort(q))
+          qs.skip.foreach(n=>cursor.skip(n))
+          qs.limit.foreach(n=>cursor.limit(n))
           log.debug(s"Query-settings: Sort:[ ${qs.sort} ] Skip:[ ${qs.skip} ] Limit:[ ${qs.limit} ] Query:[ ${qs.q} ]")
           cursor
-        })(c ⇒ Task.delay(c.close)) { c ⇒
+        })(c ⇒ Task.delay(c.close())) { c ⇒
           Task {
             if (c.hasNext) {
               val r = c.next
@@ -53,26 +54,30 @@ package object process {
         }
       }
 
-      override def leftField[A](q: QueryFree[MongoProcessStream#QuerySettings], db: String, coll: String, keyColl: String): MongoProcessStream#DBStream[A] =
+      override def leftField[A](q: QueryFree[MongoProcessStream#QuerySettings],
+                                db: String, collection: String, keyColl: String): MongoProcessStream#DBStream[A] =
         DBChannel[MongoProcessStream#Client, A](P.eval(Task.now { client: MongoProcessStream#Client ⇒
-          Task(resource(createQuery(q), client, db, coll))
+          Task(resource(createQuery(q), client, db, collection))
         })).column[A](keyColl)
 
-      override def left(q: QueryFree[MongoProcessStream#QuerySettings], db: String, coll: String): DBChannel[MongoProcessStream#Client, MongoProcessStream#DBRecord] =
+      override def left(q: QueryFree[MongoProcessStream#QuerySettings],
+                        db: String, collection: String): DBChannel[MongoProcessStream#Client, MongoProcessStream#DBRecord] =
         DBChannel[MongoProcessStream#Client, MongoProcessStream#DBRecord](P.eval(Task.now { client: MongoProcessStream#Client ⇒
-          Task(resource(createQuery(q), client, db, coll))
+          Task(resource(createQuery(q), client, db, collection))
         }))
 
-      override def relationField[A, B](r: A ⇒ QueryFree[MongoProcessStream#QuerySettings], db: String, coll: String): A ⇒ MongoProcessStream#DBStream[B] =
+      override def relationField[A, B](r: A ⇒ QueryFree[MongoProcessStream#QuerySettings],
+                                       db: String, collection: String): A ⇒ MongoProcessStream#DBStream[B] =
         id ⇒
           DBChannel[MongoProcessStream#Client, B](P.eval(Task.now { client: MongoProcessStream#Client ⇒
-            Task(resource(createQuery(r(id)), client, db, coll))
+            Task(resource(createQuery(r(id)), client, db, collection))
           }))
 
-      override def relation(r: (MongoProcessStream#DBRecord) ⇒ QueryFree[MongoProcessStream#QuerySettings], db: String, coll: String): (MongoProcessStream#DBRecord) ⇒ DBChannel[MongoProcessStream#Client, MongoProcessStream#DBRecord] =
+      override def relation(r: (MongoProcessStream#DBRecord) ⇒ QueryFree[MongoProcessStream#QuerySettings],
+                            db: String, collection: String): (MongoProcessStream#DBRecord) ⇒ DBChannel[MongoProcessStream#Client, MongoProcessStream#DBRecord] =
         topRecord ⇒
           DBChannel[MongoProcessStream#Client, MongoProcessStream#DBRecord](P.eval(Task.now { client: MongoProcessStream#Client ⇒
-            Task(resource(createQuery(r(topRecord)), client, db, coll))
+            Task(resource(createQuery(r(topRecord)), client, db, collection))
           }))
 
       override def innerJoin[A, B, C](l: MongoProcessStream#DBStream[A])(relation: A ⇒ MongoProcessStream#DBStream[B])(f: (A, B) ⇒ C): MongoProcessStream#DBStream[C] =
