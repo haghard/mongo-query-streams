@@ -14,8 +14,6 @@
 
 package join
 
-import rx.lang.scala.Observable
-
 package object mongo {
 
   case class MongoReadSettings(q: com.mongodb.DBObject, sort: Option[com.mongodb.DBObject] = None,
@@ -34,6 +32,6 @@ package object mongo {
     override type Record = com.mongodb.DBObject
     override type ReadSettings = MongoReadSettings
     override type Cursor = com.mongodb.Cursor
-    override type Stream[Out] = Observable[Out]
+    override type Stream[Out] = rx.lang.scala.Observable[Out]
   }
 }

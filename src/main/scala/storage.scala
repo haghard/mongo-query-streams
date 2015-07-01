@@ -39,21 +39,22 @@ package object storage {
     ExecutionContextScheduler(ExecutionContext.fromExecutor(exec))
 
   private trait Fetcher[T <: StorageModule, E] {
+    def interpreter: QueryInterpreter[T]
     def resource: String
     def collection: String
     def c: T#Client
-    def q: T#ReadSettings
+    def q: QFree[T#ReadSettings]
     def log: Logger
     def subscriber: Subscriber[E]
     def cursor: Option[T#Cursor]
 
     @tailrec private def go(n: Long): Unit = {
-      log.info(s"${##} request $n")
+      log.info(s"request $n")
       if (n > 0) {
         if (cursor.find(_.hasNext).isDefined) {
           subscriber.onNext(extract(cursor.get))
           go(n - 1)
-        } else subscriber.onCompleted
+        } else subscriber.onCompleted()
       }
     }
     protected def extract(c: T#Cursor): E = {
@@ -66,30 +67,59 @@ package object storage {
   }
 
   private class QueryProducer[T <: StorageModule, E](
-      val subscriber: Subscriber[E], val resource: String,
-      val collection: String, val q: T#ReadSettings, val c: T#Client, val log: Logger) extends Producer {
+      val interpreter: QueryInterpreter[T], val subscriber: Subscriber[E],
+      val resource: String, val collection: String, val q: QFree[T#ReadSettings],
+      val c: T#Client, val log: Logger) extends Producer {
     self: Fetcher[T, E] ⇒
     override def request(n: Long) = fetch(n)
   }
 
+  trait QueryInterpreter[T <: StorageModule] {
+    /**
+     *
+     */
+    def interpret(q: QFree[T#ReadSettings]): T#ReadSettings
+  }
+
+  object QueryInterpreter {
+    import scalaz.Free.runFC
+    import join.mongo.{ MongoObservable, MongoProcess, MongoReadSettings }
+    import join.cassandra.{ CassandraObservable, CassandraProcess, CassandraReadSettings }
+
+    implicit object MongoPQueryInterpreter extends QueryInterpreter[MongoProcess] {
+      override def interpret(q: QFree[MongoReadSettings]): MongoReadSettings =
+        runFC(q)(MongoQueryInterpreter).run(MongoReadSettings(new com.mongodb.BasicDBObject))._1
+    }
+
+    implicit object MongoOQueryInterpreter extends QueryInterpreter[MongoObservable] {
+      override def interpret(q: QFree[MongoReadSettings]): MongoReadSettings =
+        runFC(q)(MongoQueryInterpreter).run(MongoReadSettings(new com.mongodb.BasicDBObject))._1
+    }
+
+    implicit object CassandraPQueryInterpreter extends QueryInterpreter[CassandraProcess] {
+      override def interpret(q: QFree[CassandraReadSettings]): CassandraReadSettings =
+        runFC(q)(CassandraQueryInterpreter).run(CassandraReadSettings(""))._1
+    }
+
+    implicit object CassandraOQueryInterpreter extends QueryInterpreter[CassandraObservable] {
+      override def interpret(q: QFree[CassandraReadSettings]): CassandraReadSettings =
+        runFC(q)(CassandraQueryInterpreter).run(CassandraReadSettings(""))._1
+    }
+  }
+
   abstract class Storage[T <: StorageModule] {
-    import join.mongo._
-    import join.cassandra._
-
-    private val initM = MongoReadSettings(new com.mongodb.BasicDBObject)
-    private val initC = CassandraReadSettings("")
-
+    /**
+     *
+     *
+     */
     def outerR(q: QFree[T#ReadSettings], collection: String, resource: String,
                log: Logger, exec: ExecutorService): T#Client ⇒ T#Stream[T#Record]
-
+    /**
+     *
+     *
+     */
     def innerR(r: T#Record ⇒ QFree[T#ReadSettings], collection: String, resource: String,
                log: Logger, exec: ExecutorService): T#Client ⇒ (T#Record ⇒ T#Stream[T#Record])
-
-    protected def mongoQuery(q: QFree[T#ReadSettings]) =
-      scalaz.Free.runFC(q)(MongoQueryInterpreter).run(initM)._1
-
-    protected def cassandraQuery(q: QFree[T#ReadSettings]) =
-      scalaz.Free.runFC(q)(CassandraQueryInterpreter).run(initC)._1
   }
 
   object Storage {
@@ -97,10 +127,10 @@ package object storage {
     import join.cassandra.{ CassandraObservable, CassandraProcess, CassandraReadSettings }
 
     implicit object MongoStorageProcess extends Storage[MongoProcess] {
-
-      private def mongo[T](qs: MongoReadSettings, client: MongoClient, c: String, resource: String,
+      private def mongo[T](q: QFree[MongoReadSettings], client: MongoClient, c: String, resource: String,
                            logger: Logger, exec: ExecutorService): Process[Task, T] =
         io.resource(Task.delay {
+          val qs = implicitly[QueryInterpreter[MongoProcess]].interpret(q)
           val coll = client.getDB(resource).getCollection(c)
           val cursor = coll.find(qs.q)
           qs.sort.foreach(cursor.sort(_))
@@ -122,7 +152,7 @@ package object storage {
                           logger: Logger, exec: ExecutorService): (MongoClient) ⇒ DBChannel[MongoClient, DBObject] =
         client ⇒
           DBChannel[MongoProcess#Client, MongoProcess#Record](Process.eval(Task.now { client: MongoProcess#Client ⇒
-            Task(mongo[MongoProcess#Record](mongoQuery(qs), client, collection, resName, logger, exec))
+            Task(mongo[MongoProcess#Record](qs, client, collection, resName, logger, exec))
           }))
 
       override def innerR(r: (DBObject) ⇒ QFree[MongoReadSettings], c: String, resource: String,
@@ -130,7 +160,7 @@ package object storage {
         client ⇒
           parent ⇒
             DBChannel[MongoProcess#Client, MongoProcess#Record](Process.eval(Task.now { client: MongoProcess#Client ⇒
-              Task(mongo[MongoProcess#Record](mongoQuery(r(parent)), client, c, resource, log, exec))
+              Task(mongo[MongoProcess#Record](r(parent), client, c, resource, log, exec))
             }))
       }
     }
@@ -139,12 +169,13 @@ package object storage {
       private trait MongoFetcher[E] extends Fetcher[MongoObservable, E] {
         lazy val cursor: Option[MongoObservable#Cursor] = (Try {
           Option {
+            val qs = interpreter.interpret(q)
             val coll = c.getDB(resource).getCollection(collection)
-            val cursor = coll.find(q.q)
-            q.sort.foreach(cursor.sort(_))
-            q.skip.foreach(cursor.skip(_))
-            q.limit.foreach(cursor.limit(_))
-            log.debug(s"Query-settings: Sort:[ ${q.sort} ] Skip:[ ${q.skip} ] Limit:[ ${q.limit} ] Query:[ ${q.q} ]")
+            val cursor = coll.find(qs.q)
+            qs.sort.foreach(cursor.sort(_))
+            qs.skip.foreach(cursor.skip(_))
+            qs.limit.foreach(cursor.limit(_))
+            log.debug(s"Query-settings: Sort:[ ${qs.sort} ] Skip:[ ${qs.skip} ] Limit:[ ${qs.limit} ] Query:[ ${qs.q} ]")
             cursor
           }
         } recover {
@@ -154,36 +185,39 @@ package object storage {
         }).get
       }
 
-      private def mongo[A](q: MongoObservable#ReadSettings, c: String, resource: String,
+      private def mongo[A](q: QFree[MongoReadSettings], c: String, resource: String,
                            log: Logger, client: MongoObservable#Client, exec: ExecutorService): Observable[A] = {
         Observable { subscriber: Subscriber[A] ⇒
-          subscriber.setProducer(new QueryProducer[MongoObservable, A](subscriber, resource, c, q, client, log) with MongoFetcher[A])
+          subscriber.setProducer(new QueryProducer[MongoObservable, A](
+            implicitly[QueryInterpreter[MongoObservable]],
+            subscriber, resource, c, q, client, log) with MongoFetcher[A])
         }.subscribeOn(scheduler(exec))
       }
 
       override def outerR(q: QFree[MongoObservable#ReadSettings], c: String, resource: String,
                           log: Logger, exec: ExecutorService): (MongoClient) ⇒ Observable[DBObject] = {
         client ⇒
-          mongo[MongoObservable#Record](mongoQuery(q), c, resource, log, client, exec)
+          mongo[MongoObservable#Record](q, c, resource, log, client, exec)
       }
 
       override def innerR(r: (DBObject) ⇒ QFree[MongoReadSettings], c: String, resource: String,
                           log: Logger, exec: ExecutorService): (MongoClient) ⇒ (DBObject) ⇒ Observable[DBObject] =
         client ⇒
           parent ⇒
-            mongo[MongoObservable#Record](mongoQuery(r(parent)), c, resource, log, client, exec)
+            mongo[MongoObservable#Record](r(parent), c, resource, log, client, exec)
     }
 
     implicit object CassandraStorageProcess extends Storage[CassandraProcess] {
-      private[this] def cassandra[T](qs: CassandraReadSettings, session: Session, c: String,
+      private[this] def cassandra[T](q: QFree[CassandraReadSettings], session: Session, c: String,
                                      logger: Logger, exec: ExecutorService): Process[Task, T] =
         io.resource(Task.delay {
+          val qs = implicitly[QueryInterpreter[CassandraProcess]].interpret(q)
           val query = MessageFormat.format(qs.q, c)
           logger.debug(s"Query-settings: Query:[ $query ] Param: [ ${qs.v} ]")
           qs.v.fold(session.execute(session.prepare(query).setConsistencyLevel(qs.consistencyLevel).bind()).iterator) { r ⇒
             session.execute(session.prepare(query).setConsistencyLevel(qs.consistencyLevel).bind(r.v)).iterator
           }
-        })(c ⇒ Task.delay(session.close)) { c ⇒
+        })(c ⇒ Task.delay(session.close())) { c ⇒
           Task {
             if (c.hasNext) {
               val r = c.next
@@ -197,7 +231,7 @@ package object storage {
                           log: Logger, exec: ExecutorService): (Cluster) ⇒ DBChannel[Cluster, Row] = {
         client ⇒
           DBChannel[CassandraProcess#Client, CassandraProcess#Record](Process.eval(Task.now { client: CassandraProcess#Client ⇒
-            Task(cassandra[CassandraProcess#Record](cassandraQuery(q), client.connect(r), c, log, exec))
+            Task(cassandra[CassandraProcess#Record](q, client.connect(r), c, log, exec))
           }))
       }
 
@@ -206,7 +240,7 @@ package object storage {
         client ⇒
           parent ⇒
             DBChannel[CassandraProcess#Client, CassandraProcess#Record](Process.eval(Task.now { client: CassandraProcess#Client ⇒
-              Task(cassandra[CassandraProcess#Record](cassandraQuery(r(parent)), client.connect(res), c, log, exec))
+              Task(cassandra[CassandraProcess#Record](r(parent), client.connect(res), c, log, exec))
             }))
       }
     }
@@ -215,11 +249,12 @@ package object storage {
       private trait CassandraFetcher[E] extends Fetcher[CassandraObservable, E] {
         lazy val cursor: Option[CassandraObservable#Cursor] = (Try {
           Option {
-            val query = MessageFormat.format(q.q, collection)
+            val qs = interpreter.interpret(q)
+            val query = MessageFormat.format(qs.q, collection)
             val session = c.connect(resource)
-            log.debug(s"Query-settings: Query:[ $query ] Param: [ ${q.v} ]")
-            q.v.fold(session.execute(session.prepare(query).setConsistencyLevel(q.consistencyLevel).bind()).iterator()) { r ⇒
-              session.execute(session.prepare(query).setConsistencyLevel(q.consistencyLevel).bind(r.v)).iterator()
+            log.debug(s"Query-settings: Query:[ $query ] Param: [ ${qs.v} ]")
+            qs.v.fold(session.execute(session.prepare(query).setConsistencyLevel(qs.consistencyLevel).bind()).iterator()) { r ⇒
+              session.execute(session.prepare(query).setConsistencyLevel(qs.consistencyLevel).bind(r.v)).iterator()
             }
           }
         } recover {
@@ -229,22 +264,25 @@ package object storage {
         }).get
       }
 
-      private def cassandra[A](q: CassandraObservable#ReadSettings, client: CassandraObservable#Client,
+      private def cassandra[A](q: QFree[CassandraReadSettings], client: CassandraObservable#Client,
                                c: String, resource: String, log: Logger, exec: ExecutorService): Observable[A] = {
         Observable { subscriber: Subscriber[A] ⇒
-          subscriber.setProducer(new QueryProducer[CassandraObservable, A](subscriber, resource, c, q, client, log) with CassandraFetcher[A])
+          subscriber.setProducer(new QueryProducer[CassandraObservable, A](
+            implicitly[QueryInterpreter[CassandraObservable]],
+            subscriber, resource,
+            c, q, client, log) with CassandraFetcher[A])
         }.subscribeOn(scheduler(exec))
       }
 
       override def outerR(q: QFree[CassandraReadSettings], c: String, resource: String,
                           log: Logger, exec: ExecutorService): (Cluster) ⇒ Observable[Row] = {
-        client ⇒ cassandra[CassandraObservable#Record](cassandraQuery(q), client, c, resource, log, exec)
+        client ⇒ cassandra[CassandraObservable#Record](q, client, c, resource, log, exec)
       }
 
       override def innerR(r: (Row) ⇒ QFree[CassandraReadSettings], c: String, res: String,
                           log: Logger, exec: ExecutorService): (Cluster) ⇒ (Row) ⇒ Observable[Row] = {
         client ⇒
-          parent ⇒ cassandra[CassandraObservable#Record](cassandraQuery(r(parent)), client, c, res, log, exec)
+          parent ⇒ cassandra[CassandraObservable#Record](r(parent), client, c, res, log, exec)
       }
     }
 
