@@ -65,7 +65,7 @@ trait CassandraEnviromentLifecycle extends BeforeAndAfterAll { this: Suite ⇒
     CassandraServerHelper.startEmbeddedCassandra(f, "./cas-tmp", 10.seconds.toMillis)
 
     val clusterBuilder = com.datastax.driver.core.Cluster.builder
-      .addContactPointsWithPorts(List(new InetSocketAddress("127.0.0.1", 9142)).asJava)
+      .addContactPointsWithPorts(cassandraHost)
     val cluster = clusterBuilder.build
     val session = cluster.connect()
 
