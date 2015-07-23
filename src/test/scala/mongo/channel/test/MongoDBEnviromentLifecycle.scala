@@ -12,27 +12,14 @@
  * limitations under the License.
  */
 
-package mongo.query.test
+package mongo.channel.test
 
-import com.mongodb.MongoClient
-import de.bwaldvogel.mongo.MongoServer
-import org.specs2.mutable.After
-
-trait MongoClientJoinEnviromentLifecycle extends After {
+trait MongoDBEnviromentLifecycle[T] extends org.specs2.mutable.Before {
   import MongoIntegrationEnv._
-  val logger = org.apache.log4j.Logger.getLogger("MongoStreams-Mongo-Enviroment")
-  var client: MongoClient = _
-  var server: MongoServer = _
 
-  def initMongo = {
-    val r = prepareMockMongo()
-    client = r._1
-    server = r._2
-  }
+  protected lazy val Resource = mockDB()
 
-  override def after = {
-    logger.info("Close all mongo resources")
-    client.close
-    server.shutdown
-  }
+  protected val (sink, buffer) = sinkWithBuffer[T]
+
+  override def before = Resource
 }

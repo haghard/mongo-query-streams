@@ -19,7 +19,7 @@ import dsl.QFree
 import dsl.cassandra.CassandraQueryInterpreter
 import dsl.mongo.MongoQueryInterpreter
 import join.StorageModule
-import mongo.query.DBChannel
+import mongo.channel.DBChannel
 import org.apache.log4j.Logger
 import com.mongodb.{ DBObject, MongoClient }
 import com.datastax.driver.core.{ Session, Row, Cluster }

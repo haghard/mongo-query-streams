@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package mongo.query.test.join
+package mongo.channel.test.join
 
 import join.Join
 import scala.collection.mutable
@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicReference
 import org.scalatest.{ Matchers, WordSpecLike }
 import join.cassandra.{ CassandraObservable, CassandraProcess }
 import com.datastax.driver.core.{ Cluster, ConsistencyLevel, Row ⇒ CRow }
-import mongo.query.test.cassandra.CassandraEnviromentLifecycle
+import mongo.channel.test.cassandra.CassandraEnviromentLifecycle
 import rx.lang.scala.schedulers.ExecutionContextScheduler
 import scala.concurrent.ExecutionContext
 import scalaz.stream.{ Process, io }

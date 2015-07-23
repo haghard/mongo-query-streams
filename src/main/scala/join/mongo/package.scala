@@ -24,7 +24,7 @@ package object mongo {
     override type Record = com.mongodb.DBObject
     override type ReadSettings = MongoReadSettings
     override type Cursor = com.mongodb.Cursor
-    override type Stream[Out] = _root_.mongo.query.DBChannel[Client, Out]
+    override type Stream[Out] = _root_.mongo.channel.DBChannel[Client, Out]
   }
 
   trait MongoObservable extends StorageModule {

@@ -12,14 +12,14 @@
  * limitations under the License.
  */
 
-package mongo.query.test
+package mongo.channel.test
 
 import java.util.Arrays._
 import java.util.Date
 import java.util.concurrent.{ ExecutorService, Executors, ThreadLocalRandom, TimeUnit }
 
-import _root_.mongo.query.{ DBChannel, DBChannelFactory, QuerySetting }
-import _root_.mongo.{ NamedThreadFactory, query }
+import _root_.mongo.channel.{ DBChannel, DBChannelFactory, QuerySetting }
+import _root_.mongo.{ NamedThreadFactory, channel }
 import com.mongodb._
 import de.bwaldvogel.mongo.MongoServer
 import de.bwaldvogel.mongo.backend.memory.MemoryBackend
@@ -37,7 +37,7 @@ object MongoIntegrationEnv {
 
   private val logger = org.apache.log4j.Logger.getLogger("mongo-streams")
 
-  implicit val executor = Executors.newFixedThreadPool(5, new NamedThreadFactory("mongo-test-worker"))
+  implicit val executor = Executors.newFixedThreadPool(5, new NamedThreadFactory("mongo-test-executor"))
 
   val categoryIds = lift { obj: DBObject ⇒
     (obj.get("name").asInstanceOf[String],
@@ -114,7 +114,7 @@ object MongoIntegrationEnv {
     (client, server)
   }
 
-  def mock(): (MongoClient, MongoServer) = prepareMockMongo()
+  def mongoMock(): (MongoClient, MongoServer) = prepareMockMongo()
 
   def mockDB()(implicit executor: java.util.concurrent.ExecutorService): scalaz.stream.Process[Task, DB] = {
     scalaz.stream.io.resource(Task.delay(prepareMockMongo()))(rs ⇒ Task.delay {
@@ -143,7 +143,7 @@ object MongoIntegrationEnv {
     override def createChannel(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[DB, DBObject] = {
       arg match {
         case \/-(setting) ⇒
-          query.DBChannel {
+          DBChannel {
             eval(Task.now { db: DB ⇒
               Task {
                 scalaz.stream.io.resource(
@@ -174,7 +174,7 @@ object MongoIntegrationEnv {
               }(pool)
             })
           }
-        case -\/(error) ⇒ query.DBChannel(eval(Task.fail(new MongoException(error))))
+        case -\/(error) ⇒ DBChannel(eval(Task.fail(new MongoException(error))))
       }
     }
   }

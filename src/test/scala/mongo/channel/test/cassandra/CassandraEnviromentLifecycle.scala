@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package mongo.query.test.cassandra
+package mongo.channel.test.cassandra
 
 import java.io.File
 import java.net.InetSocketAddress

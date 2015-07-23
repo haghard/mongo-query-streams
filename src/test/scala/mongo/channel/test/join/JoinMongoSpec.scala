@@ -12,14 +12,14 @@
  * limitations under the License.
  */
 
-package mongo.query.test.join
+package mongo.channel.test.join
 
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicLong
 
 import com.mongodb.DBObject
 
-import mongo.query.test.{ MongoClientJoinEnviromentLifecycle, MongoIntegrationEnv }
+import mongo.channel.test.{ MongoClientJoinEnviromentLifecycle, MongoIntegrationEnv }
 import org.specs2.mutable.Specification
 import rx.lang.scala.Subscriber
 import rx.lang.scala.schedulers.ExecutionContextScheduler

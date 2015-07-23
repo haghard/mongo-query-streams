@@ -14,21 +14,19 @@
 
 package mongo
 
-import java.util.concurrent.{ExecutorService, TimeUnit}
+import java.util.concurrent.{ ExecutorService, TimeUnit }
+import com.mongodb.{ DBObject, MongoClient, MongoException }
 
-import com.datastax.driver.core.Row
-import com.mongodb.{DBObject, MongoClient, MongoException}
 import org.apache.log4j.Logger
-
-import scala.util.{Failure, Success, Try}
+import scala.util.{ Failure, Success, Try }
 import scalaz.Scalaz._
-import scalaz.concurrent.Task
+import scalaz.concurrent.{ Strategy, Task }
 import scalaz.stream.Process._
 import scalaz.stream._
 import scalaz.stream.process1._
-import scalaz.{-\/, \/, \/-}
+import scalaz.{ -\/, \/, \/- }
 
-package object query {
+package object channel {
 
   private type ResponseChannel[T, A] = Channel[Task, T, Process[Task, A]]
 
@@ -121,8 +119,8 @@ package object query {
      * @tparam B
      * @return
      */
-    def either[B](other: Process[Task, B]): DBChannel[T, A \/ B] =
-      liftP { p ⇒ p.wye(other)(scalaz.stream.wye.either) }
+    def either[B](other: Process[Task, B])(implicit ex: ExecutorService): DBChannel[T, A \/ B] =
+      liftP { p ⇒ p.wye(other)(scalaz.stream.wye.either)(Strategy.Executor(ex)) }
 
     /**
      * Interleave or combine the outputs of two processes.
@@ -171,7 +169,7 @@ package object query {
       flatMap { id: A ⇒ relation(id) |> lift(f(id, _)) }
 
     /**
-     * Allows you to extract specified field from [[Row]] by name with type cast
+     * Allows you to extract specified field from [[com.datastax.driver.core.Row]] by name with type cast
      * @param name field name
      * @tparam B  field type
      * @throws Exception If item is not a `Row`.
@@ -180,26 +178,26 @@ package object query {
     def column[B](name: String): DBChannel[T, B] = {
       pipe(lift {
         case r: DBObject ⇒ r.get(name).asInstanceOf[B]
-        case other ⇒ throw new Exception(s"DatabaseObject expected but found ${other.getClass.getName}")
+        case other       ⇒ throw new Exception(s"DatabaseObject expected but found ${other.getClass.getName}")
       })
     }
   }
 
-  private[query] trait MutableBuilder {
-    private[query] var skip: Option[Int] = None
-    private[query] var limit: Option[Int] = None
-    private[query] var maxTimeMS: Option[Long] = None
-    private[query] var collectionName: Option[String] = None
-    private[query] var query: String \/ Option[DBObject] = \/-(None)
-    private[query] var dbName: Option[String] = None
-    private[query] var sortQuery: String \/ Option[DBObject] = \/-(None)
-    private[query] var readPreference: Option[ReadPreference] = None
+  private[channel] trait MutableBuilder {
+    private[channel] var skip: Option[Int] = None
+    private[channel] var limit: Option[Int] = None
+    private[channel] var maxTimeMS: Option[Long] = None
+    private[channel] var collectionName: Option[String] = None
+    private[channel] var query: String \/ Option[DBObject] = \/-(None)
+    private[channel] var dbName: Option[String] = None
+    private[channel] var sortQuery: String \/ Option[DBObject] = \/-(None)
+    private[channel] var readPreference: Option[ReadPreference] = None
 
     private val parser = mongo.mqlparser.MqlParser()
 
     private def parse(query: String): String \/ Option[DBObject] = {
       Try(parser.parse(query)) match {
-        case Success(q) ⇒ \/-(Option(q))
+        case Success(q)  ⇒ \/-(Option(q))
         case Failure(er) ⇒ -\/(er.getMessage)
       }
     }
@@ -265,11 +263,11 @@ package object query {
                 logger.debug(s"Query:[${setting.q}] ReadPrefs:[$rpLine}] Server:[${cursor.getServerAddress}] Sort:[${setting.sortQuery}] Limit:[${setting.limit}] Skip:[${setting.skip}]")
                 cursor
               })(c ⇒ Task.delay(c.close())) { c ⇒
-              Task.delay {
-                if (c.hasNext) c.next
-                else throw Cause.Terminated(Cause.End)
+                Task.delay {
+                  if (c.hasNext) c.next
+                  else throw Cause.Terminated(Cause.End)
+                }
               }
-            }
           }(pool)
         }))
       })

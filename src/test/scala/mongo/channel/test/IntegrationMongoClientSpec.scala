@@ -12,17 +12,17 @@
  * limitations under the License.
  */
 
-package mongo.query.test
+package mongo.channel.test
 
 import mongo._
 import java.util.Date
-import mongo.query.create
+import mongo.channel.create
 import scalaz.\/
 import scalaz.concurrent.Task
 import org.apache.log4j.Logger
 import scalaz.stream.Process._
 import java.util.concurrent.atomic.AtomicBoolean
-import MongoIntegrationEnv.{ executor, ids, sinkWithBuffer, mock, TEST_DB, PRODUCT, CATEGORY }
+import MongoIntegrationEnv.{ executor, ids, sinkWithBuffer, mongoMock, TEST_DB, PRODUCT, CATEGORY }
 import org.specs2.mutable._
 
 trait MongoClientEnviromentLifecycle[T] extends org.specs2.mutable.After {
@@ -32,11 +32,11 @@ trait MongoClientEnviromentLifecycle[T] extends org.specs2.mutable.After {
   val isFailureInvoked = new AtomicBoolean()
   val isFailureComplete = new AtomicBoolean()
 
-  lazy val server = mock()
+  lazy val server = mongoMock()
 
   def EnvLogger() = MongoIntegrationEnv.LoggerSink(logger)
 
-  def EnvLoggerEither() = MongoIntegrationEnv.LoggerSinkEither(logger)
+  def QueryLoggerSink() = MongoIntegrationEnv.LoggerSinkEither(logger)
 
   /**
    * Start mock mongo and return Process
@@ -163,11 +163,13 @@ class IntegrationMongoClientSpec extends Specification {
     (for {
       cats ← Resource through categories.out
       prodOrCat ← Resource through ((products either cats).out)
-      _ ← prodOrCat observe EnvLoggerEither to sink
+      _ ← prodOrCat observe QueryLoggerSink to sink
     } yield ())
       .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); halt }
       .onComplete { eval(Task.delay(logger.debug(s"Interaction has been completed"))) }
       .runLog.run
+
+    logger.info(buffer)
 
     buffer.size === 5
   }

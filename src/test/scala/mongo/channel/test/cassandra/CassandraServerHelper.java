@@ -1,4 +1,4 @@
-package mongo.query.test.cassandra;
+package mongo.channel.test.cassandra;
 
 import me.prettyprint.cassandra.service.CassandraHostConfigurator;
 import me.prettyprint.hector.api.Cluster;

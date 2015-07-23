@@ -48,6 +48,6 @@ package object cassandra {
     override type Record = com.datastax.driver.core.Row
     override type ReadSettings = CassandraReadSettings
     override type Cursor = java.util.Iterator[com.datastax.driver.core.Row]
-    override type Stream[Out] = _root_.mongo.query.DBChannel[Client, Out]
+    override type Stream[Out] = _root_.mongo.channel.DBChannel[Client, Out]
   }
 }
