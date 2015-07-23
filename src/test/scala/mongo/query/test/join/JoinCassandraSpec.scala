@@ -15,6 +15,7 @@
 package mongo.query.test.join
 
 import join.Join
+import scala.collection.mutable
 import scalaz.concurrent.Task
 import rx.lang.scala.Subscriber
 import java.util.function.UnaryOperator
@@ -26,8 +27,6 @@ import join.cassandra.{ CassandraObservable, CassandraProcess }
 import com.datastax.driver.core.{ Cluster, ConsistencyLevel, Row ⇒ CRow }
 import mongo.query.test.cassandra.CassandraEnviromentLifecycle
 import rx.lang.scala.schedulers.ExecutionContextScheduler
-
-import scala.collection.mutable.Buffer
 import scala.concurrent.ExecutionContext
 import scalaz.stream.{ Process, io }
 
@@ -37,7 +36,7 @@ class JoinCassandraSpec extends WordSpecLike with Matchers with CassandraEnvirom
   "Join with CassandraProcess" should {
     "have run" in {
       val P = Process
-      val buffer = Buffer.empty[String]
+      val buffer = mutable.Buffer.empty[String]
       val Sink = io.fillBuffer(buffer)
       implicit val client = Cluster.builder().addContactPointsWithPorts(cassandraHost).build
 
@@ -60,7 +59,7 @@ class JoinCassandraSpec extends WordSpecLike with Matchers with CassandraEnvirom
         _ ← row to Sink
       } yield ())
         .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); P.halt }
-        .onComplete { P.eval(Task.delay { client.close; logger.debug("Join has been completed") }) }
+        .onComplete { P.eval(Task.delay { client.close(); logger.debug("Join has been completed") }) }
         .runLog.run
 
       logger.info("Result:" + buffer)

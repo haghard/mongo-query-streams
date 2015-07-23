@@ -14,22 +14,23 @@
 
 package mongo
 
+import java.util.concurrent.{ExecutorService, TimeUnit}
+
 import com.datastax.driver.core.Row
+import com.mongodb.{DBObject, MongoClient, MongoException}
 import org.apache.log4j.Logger
-import scalaz.concurrent.Task
-import scalaz.{ -\/, \/, \/- }
-import scala.util.{ Failure, Success, Try }
-import scalaz.stream._
-import java.util.concurrent.{ ExecutorService, TimeUnit }
+
+import scala.util.{Failure, Success, Try}
 import scalaz.Scalaz._
+import scalaz.concurrent.Task
 import scalaz.stream.Process._
+import scalaz.stream._
 import scalaz.stream.process1._
+import scalaz.{-\/, \/, \/-}
 
 package object query {
 
-  import com.mongodb.{ DBObject, MongoClient, MongoException }
-
-  type ResponseChannel[T, A] = Channel[Task, T, Process[Task, A]]
+  private type ResponseChannel[T, A] = Channel[Task, T, Process[Task, A]]
 
   case class QuerySetting(q: DBObject, db: String, cName: String, sortQuery: Option[DBObject],
                           limit: Option[Int], skip: Option[Int], maxTimeMS: Option[Long],
@@ -42,7 +43,7 @@ package object query {
   case class DBChannel[T, A](out: ResponseChannel[T, A]) {
 
     private def liftP[B](f: Process[Task, A] ⇒ Process[Task, B]): DBChannel[T, B] =
-      DBChannel { out.map(step ⇒ step.andThen(task ⇒ task.map(p ⇒ f(p)))) }
+      DBChannel(out.map(step ⇒ step.andThen(task ⇒ task.map(p ⇒ f(p)))))
 
     private def pipe[B](p2: Process1[A, B]): DBChannel[T, B] = liftP(_.pipe(p2))
 
@@ -154,7 +155,11 @@ package object query {
      * @return
      */
     def join[E, C](relation: A ⇒ DBChannel[T, E])(f: (A, E) ⇒ C): DBChannel[T, C] =
-      flatMap { id: A ⇒ relation(id) |> (lift { f(id, _) }) }
+      flatMap { id: A ⇒
+        relation(id) |> lift {
+          f(id, _)
+        }
+      }
 
     /**
      * One to many relation powered by `flatMap` with raw objects in output
@@ -175,7 +180,7 @@ package object query {
     def column[B](name: String): DBChannel[T, B] = {
       pipe(lift {
         case r: DBObject ⇒ r.get(name).asInstanceOf[B]
-        case other       ⇒ throw new Exception(s"DatabaseObject expected but found ${other.getClass.getName}")
+        case other ⇒ throw new Exception(s"DatabaseObject expected but found ${other.getClass.getName}")
       })
     }
   }
@@ -194,7 +199,7 @@ package object query {
 
     private def parse(query: String): String \/ Option[DBObject] = {
       Try(parser.parse(query)) match {
-        case Success(q)  ⇒ (\/-(Option(q)))
+        case Success(q) ⇒ \/-(Option(q))
         case Failure(er) ⇒ -\/(er.getMessage)
       }
     }
@@ -211,15 +216,15 @@ package object query {
 
     def sort(query: QueryBuilder): Unit = sortQuery = \/-(Option(query.q))
 
-    def limit(n: Int): Unit = limit = Some(n)
+    def limit(n: Int): Unit = limit = Option(n)
 
-    def skip(n: Int): Unit = skip = Some(n)
+    def skip(n: Int): Unit = skip = Option(n)
 
-    def maxTimeMS(mills: Long): Unit = maxTimeMS = Some(mills)
+    def maxTimeMS(mills: Long): Unit = maxTimeMS = Option(mills)
 
-    def collection(name: String): Unit = collectionName = Some(name)
+    def collection(name: String): Unit = collectionName = Option(name)
 
-    def readPreference(r: ReadPreference): Unit = readPreference = Some(r)
+    def readPreference(r: ReadPreference): Unit = readPreference = Option(r)
 
     def build(): String \/ QuerySetting
   }
@@ -239,36 +244,34 @@ package object query {
     q createChannel builder.build
   }
 
-  //default
-  implicit object default extends DBChannelFactory[MongoClient] {
-    override def createChannel(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[MongoClient, DBObject] = {
-      arg match {
-        case \/-(qs) ⇒
-          DBChannel(eval(Task.now { client: MongoClient ⇒
-            Task {
-              val logger = Logger.getLogger("mongo-streamer")
-              scalaz.stream.io.resource(
-                Task delay {
-                  val collection = client.getDB(qs.db).getCollection(qs.cName)
-                  var cursor = collection.find(qs.q)
-                  cursor = qs.readPref.fold(cursor) { p ⇒ cursor.setReadPreference(p.asMongoDbReadPreference) }
-                  qs.sortQuery.foreach(cursor.sort(_))
-                  qs.skip.foreach(cursor.skip(_))
-                  qs.limit.foreach(cursor.limit(_))
-                  qs.maxTimeMS.foreach(cursor.maxTime(_, TimeUnit.MILLISECONDS))
-                  val rpLine = qs.readPref.fold("Empty") { p ⇒ p.asMongoDbReadPreference.toString }
-                  logger.debug(s"Query:[${qs.q}] ReadPrefs:[$rpLine}] Server:[${cursor.getServerAddress}] Sort:[${qs.sortQuery}] Limit:[${qs.limit}] Skip:[${qs.skip}]")
-                  cursor
-                })(c ⇒ Task.delay(c.close())) { c ⇒
-                  Task.delay {
-                    if (c.hasNext) c.next
-                    else throw Cause.Terminated(Cause.End)
-                  }
+  implicit object defaultChannel extends DBChannelFactory[MongoClient] {
+    override def createChannel(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[MongoClient, DBObject] =
+      arg.fold({ error ⇒ DBChannel(eval(Task.fail(new MongoException(error)))) }, { qs ⇒
+        DBChannel(eval(Task.now { client: MongoClient ⇒
+          Task {
+            val logger = Logger.getLogger("mongo-streamer")
+            scalaz.stream.io.resource(
+              Task delay {
+                val collection = client.getDB(qs.db).getCollection(qs.cName)
+                val cursor = collection.find(qs.q)
+                scalaz.syntax.id.ToIdOpsDeprecated(cursor) |> { c ⇒
+                  qs.readPref.fold(c)(p ⇒ c.setReadPreference(p.asMongoDbReadPreference))
+                  qs.sortQuery.foreach(c.sort)
+                  qs.skip.foreach(c.skip)
+                  qs.limit.foreach(c.limit)
+                  qs.maxTimeMS.foreach(c.maxTime(_, TimeUnit.MILLISECONDS))
                 }
+                val rpLine = qs.readPref.fold("Empty") { p ⇒ p.asMongoDbReadPreference.toString }
+                logger.debug(s"Query:[${qs.q}] ReadPrefs:[$rpLine}] Server:[${cursor.getServerAddress}] Sort:[${qs.sortQuery}] Limit:[${qs.limit}] Skip:[${qs.skip}]")
+                cursor
+              })(c ⇒ Task.delay(c.close())) { c ⇒
+              Task.delay {
+                if (c.hasNext) c.next
+                else throw Cause.Terminated(Cause.End)
+              }
             }
-          }))
-        case -\/(error) ⇒ DBChannel(eval(Task.fail(new MongoException(error))))
-      }
-    }
+          }(pool)
+        }))
+      })
   }
 }

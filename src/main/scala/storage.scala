@@ -32,6 +32,7 @@ import scala.util.Try
 import scalaz.concurrent.Task
 import scalaz.stream.{ Cause, io }
 import scalaz.stream.Process
+import scalaz.syntax.id._
 
 package object storage {
 
@@ -51,14 +52,14 @@ package object storage {
     @tailrec private def go(n: Long): Unit = {
       log.info(s"request $n")
       if (n > 0) {
-        if (cursor.find(_.hasNext).isDefined) {
+        if (cursor.exists(_.hasNext())) {
           subscriber.onNext(extract(cursor.get))
           go(n - 1)
         } else subscriber.onCompleted()
       }
     }
     protected def extract(c: T#Cursor): E = {
-      val r = c.next.asInstanceOf[E]
+      val r = c.next().asInstanceOf[E]
       log.info(s"fetch $r")
       r
     }
@@ -133,12 +134,14 @@ package object storage {
           val qs = implicitly[QueryInterpreter[MongoProcess]].interpret(q)
           val coll = client.getDB(resource).getCollection(c)
           val cursor = coll.find(qs.q)
-          qs.sort.foreach(cursor.sort(_))
-          qs.skip.foreach(cursor.skip(_))
-          qs.limit.foreach(cursor.limit(_))
+          cursor |> { c ⇒
+            qs.sort.foreach(c.sort)
+            qs.skip.foreach(c.skip)
+            qs.limit.foreach(c.limit)
+          }
           logger.debug(s"Query-settings: Sort:[ ${qs.sort} ] Skip:[ ${qs.skip} ] Limit:[ ${qs.limit} ] Query:[ ${qs.q} ]")
           cursor
-        })(c ⇒ Task.delay(c.close)) { c ⇒
+        })(c ⇒ Task.delay(c.close())) { c ⇒
           Task {
             if (c.hasNext) {
               val r = c.next
@@ -172,9 +175,12 @@ package object storage {
             val qs = interpreter.interpret(q)
             val coll = c.getDB(resource).getCollection(collection)
             val cursor = coll.find(qs.q)
-            qs.sort.foreach(cursor.sort(_))
-            qs.skip.foreach(cursor.skip(_))
-            qs.limit.foreach(cursor.limit(_))
+            cursor |> { c ⇒
+              qs.sort.foreach(c.sort)
+              qs.skip.foreach(c.skip)
+              qs.limit.foreach(c.limit)
+            }
+
             log.debug(s"Query-settings: Sort:[ ${qs.sort} ] Skip:[ ${qs.skip} ] Limit:[ ${qs.limit} ] Query:[ ${qs.q} ]")
             cursor
           }

@@ -19,12 +19,12 @@ import java.util.concurrent.atomic.AtomicLong
 
 import com.mongodb.DBObject
 
-import mongo.query.test.{ MongoClientEnviromentLifecycle, MongoIntegrationEnv }
+import mongo.query.test.{ MongoClientJoinEnviromentLifecycle, MongoIntegrationEnv }
 import org.specs2.mutable.Specification
 import rx.lang.scala.Subscriber
 import rx.lang.scala.schedulers.ExecutionContextScheduler
 
-import scala.collection.mutable.Buffer
+import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scalaz.concurrent.Task
 import scalaz.stream.{ Process, io }
@@ -36,10 +36,10 @@ class JoinMongoSpec extends Specification {
   import mongo._
   import dsl.mongo._
 
-  "Join with MongoProcess" in new MongoClientEnviromentLifecycle {
+  "Join with MongoProcess" in new MongoClientJoinEnviromentLifecycle {
     initMongo
 
-    val buffer = Buffer.empty[String]
+    val buffer = mutable.Buffer.empty[String]
     val Sink = io.fillBuffer(buffer)
     implicit val c = client
 
@@ -60,7 +60,7 @@ class JoinMongoSpec extends Specification {
     buffer.size === 10
   }
 
-  "Join with MongoObservable" in new MongoClientEnviromentLifecycle {
+  "Join with MongoObservable" in new MongoClientJoinEnviromentLifecycle {
     initMongo
 
     implicit val c = client

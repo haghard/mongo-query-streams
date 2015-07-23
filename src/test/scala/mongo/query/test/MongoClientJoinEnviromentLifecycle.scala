@@ -18,7 +18,7 @@ import com.mongodb.MongoClient
 import de.bwaldvogel.mongo.MongoServer
 import org.specs2.mutable.After
 
-trait MongoClientEnviromentLifecycle extends After {
+trait MongoClientJoinEnviromentLifecycle extends After {
   import MongoIntegrationEnv._
   val logger = org.apache.log4j.Logger.getLogger("MongoStreams-Mongo-Enviroment")
   var client: MongoClient = _
