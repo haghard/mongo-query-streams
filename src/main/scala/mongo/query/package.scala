@@ -246,23 +246,23 @@ package object query {
 
   implicit object defaultChannel extends DBChannelFactory[MongoClient] {
     override def createChannel(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[MongoClient, DBObject] =
-      arg.fold({ error ⇒ DBChannel(eval(Task.fail(new MongoException(error)))) }, { qs ⇒
+      arg.fold({ error ⇒ DBChannel(eval(Task.fail(new MongoException(error)))) }, { setting ⇒
         DBChannel(eval(Task.now { client: MongoClient ⇒
           Task {
             val logger = Logger.getLogger("mongo-streamer")
             scalaz.stream.io.resource(
               Task delay {
-                val collection = client.getDB(qs.db).getCollection(qs.cName)
-                val cursor = collection.find(qs.q)
+                val collection = client.getDB(setting.db).getCollection(setting.cName)
+                val cursor = collection.find(setting.q)
                 scalaz.syntax.id.ToIdOpsDeprecated(cursor) |> { c ⇒
-                  qs.readPref.fold(c)(p ⇒ c.setReadPreference(p.asMongoDbReadPreference))
-                  qs.sortQuery.foreach(c.sort)
-                  qs.skip.foreach(c.skip)
-                  qs.limit.foreach(c.limit)
-                  qs.maxTimeMS.foreach(c.maxTime(_, TimeUnit.MILLISECONDS))
+                  setting.readPref.fold(c)(p ⇒ c.setReadPreference(p.asMongoDbReadPreference))
+                  setting.sortQuery.foreach(c.sort)
+                  setting.skip.foreach(c.skip)
+                  setting.limit.foreach(c.limit)
+                  setting.maxTimeMS.foreach(c.maxTime(_, TimeUnit.MILLISECONDS))
                 }
-                val rpLine = qs.readPref.fold("Empty") { p ⇒ p.asMongoDbReadPreference.toString }
-                logger.debug(s"Query:[${qs.q}] ReadPrefs:[$rpLine}] Server:[${cursor.getServerAddress}] Sort:[${qs.sortQuery}] Limit:[${qs.limit}] Skip:[${qs.skip}]")
+                val rpLine = setting.readPref.fold("Empty") { p ⇒ p.asMongoDbReadPreference.toString }
+                logger.debug(s"Query:[${setting.q}] ReadPrefs:[$rpLine}] Server:[${cursor.getServerAddress}] Sort:[${setting.sortQuery}] Limit:[${setting.limit}] Skip:[${setting.skip}]")
                 cursor
               })(c ⇒ Task.delay(c.close())) { c ⇒
               Task.delay {
