@@ -32,7 +32,7 @@ scalacOptions ++= Seq(
 )
 
 val MongoDriverVersion = "3.0.2"
-val ScalazStreamVersion = "0.7.1a"
+val ScalazStreamVersion = "0.7.2a"
 val RxScala = "0.25.0"
 val localMvnRepo = "/Volumes/Data/dev_build_tools/apache-maven-3.1.1/repository"
 

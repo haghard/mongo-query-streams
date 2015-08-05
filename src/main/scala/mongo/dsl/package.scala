@@ -282,7 +282,6 @@ package object dsl { outer ⇒
               }).get
 
               @tailrec def go(n: Long): Unit = {
-                logger.info(s"request $n")
                 if (n > 0) {
                   if (cursor.find(_.hasNext).isDefined) {
                     val r = cursor.get.next().asInstanceOf[T]

@@ -124,7 +124,7 @@ class WriterQueryBuilderSpec extends Specification {
         new BasicDBObject("$gt", 3).append("$lt", 90)).append("name",
         new BasicDBObject("$ne", false))
 
-      val q = NestedMap(("num" -> Seq($gt().op -> 3, $lt().op -> 90)), ("name" -> Seq(($ne().op -> false))))
+      val q = NestedMap("num" -> Seq($gt().op -> 3, $lt().op -> 90), "name" -> Seq($ne().op -> false))
       val actual = MqlParser().parse(q.toString)
       expected mustEqual actual
     }

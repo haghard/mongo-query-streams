@@ -25,7 +25,7 @@ package object mongo {
     val Primary, Secondary, Nearest = Value
   }
 
-  implicit def mrpToReadPreference(rp: ReadPreference.Value) = ReadPreference(rp)
+  implicit def mrpToReadPreference(rp: ReadPreference.Value): ReadPreference = ReadPreference(rp)
 
   case class ReadPreference(pref: ReadPreference.Value, preferred: Boolean = false, tag: List[TagSet] = Nil) {
     import scala.collection.JavaConverters._
@@ -92,10 +92,10 @@ package object mongo {
 
   private[mongo] case class EqQueryFragment(override val q: BasicDBObject) extends QueryBuilder
 
-  private[mongo] case class ComposableQueryFragment(val field: String, val nested: Option[BasicDBObject]) extends QueryDsl with QueryBuilder {
+  private[mongo] case class ComposableQueryFragment(field: String, nested: Option[BasicDBObject]) extends QueryDsl with QueryBuilder {
     override val self = this
     override def q = new BasicDBObject(field, nested.fold(new BasicDBObject())(x ⇒ x))
-    override def toString() = q.toString
+    override def toString = q.toString
   }
 
   private[mongo] case class AndQueryFragment(cs: TraversableOnce[QueryBuilder]) extends QueryBuilder {
@@ -103,7 +103,7 @@ package object mongo {
       arr.add(c.q)
       arr
     })
-    override def toString() = q.toString
+    override def toString = q.toString
   }
 
   private[mongo] case class OrQueryFragment(cs: TraversableOnce[QueryBuilder]) extends QueryBuilder {
@@ -111,10 +111,10 @@ package object mongo {
       arr.add(c.q)
       arr
     })
-    override def toString() = q.toString
+    override def toString = q.toString
   }
 
-  implicit def f2b(f: String) = ComposableQueryFragment(f, None)
+  implicit def f2b(f: String): ComposableQueryFragment = ComposableQueryFragment(f, None)
 
   def &&(bs: QueryBuilder*) = AndQueryFragment(bs)
   def ||(bs: QueryBuilder*) = OrQueryFragment(bs)

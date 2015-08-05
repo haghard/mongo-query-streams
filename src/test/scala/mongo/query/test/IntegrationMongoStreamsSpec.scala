@@ -18,7 +18,7 @@ import com.mongodb.{ DBObject, MongoClient }
 import de.bwaldvogel.mongo.MongoServer
 import mongo.query.test.MongoIntegrationEnv._
 import org.specs2.mutable.Specification
-import scala.collection.mutable.Buffer
+import scala.collection.mutable
 import scalaz.\/-
 import scalaz.concurrent.Task
 import scalaz.stream.io
@@ -28,7 +28,7 @@ trait MongoStreamsEnviroment extends org.specs2.mutable.After {
   var client: MongoClient = _
   var server: MongoServer = _
 
-  def initMongo = {
+  def initMongo() = {
     val r = prepareMockMongo()
     client = r._1
     server = r._2
@@ -36,8 +36,8 @@ trait MongoStreamsEnviroment extends org.specs2.mutable.After {
 
   override def after = {
     logger.info("Close all resources")
-    client.close
-    server.shutdown
+    client.close()
+    server.shutdown()
   }
 }
 
@@ -52,7 +52,7 @@ class IntegrationMongoStreamsSpec extends Specification {
   val P = scalaz.stream.Process
 
   "Build query and perform findOne" in new MongoStreamsEnviroment {
-    initMongo
+    initMongo()
 
     val p = for { q ← "index" $eq 0 } yield q
     val out = p.findOne(client, TEST_DB, LANGS).attemptRun
@@ -64,7 +64,7 @@ class IntegrationMongoStreamsSpec extends Specification {
   }
 
   "Build query and perform find batch" in new MongoStreamsEnviroment {
-    initMongo
+    initMongo()
 
     val p = for {
       _ ← "index" $gte 0 $lte 5
@@ -82,11 +82,11 @@ class IntegrationMongoStreamsSpec extends Specification {
   }
 
   "Build query and perform streaming using scalaz.Process" in new MongoStreamsEnviroment {
-    initMongo
+    initMongo()
     implicit val cl = client
     val q = for { ex ← "index" $gte 0 $lt 5 } yield ex
 
-    val buf = Buffer.empty[DBObject]
+    val buf = mutable.Buffer.empty[DBObject]
     val sink = io.fillBuffer(buf)
 
     val out = (q.stream[MProcess](TEST_DB, LANGS) to sink).run.attemptRun
@@ -95,7 +95,7 @@ class IntegrationMongoStreamsSpec extends Specification {
   }
 
   "Build query and perform streaming using mongoStream" in new MongoStreamsEnviroment {
-    initMongo
+    initMongo()
     val field = "index"
 
     val query = for {
@@ -103,7 +103,7 @@ class IntegrationMongoStreamsSpec extends Specification {
       q ← sort(field -> Descending)
     } yield q
 
-    val buffer = Buffer.empty[String]
+    val buffer = mutable.Buffer.empty[String]
     val Sink = io.fillBuffer(buffer)
 
     val p = (for {
@@ -119,8 +119,8 @@ class IntegrationMongoStreamsSpec extends Specification {
   }
 
   "One to many join through sChannel with fixed columns" in new MongoStreamsEnviroment {
-    initMongo
-    val buffer = Buffer.empty[String]
+    initMongo()
+    val buffer = mutable.Buffer.empty[String]
     val Sink = io.fillBuffer(buffer)
 
     //Select all lang
@@ -150,8 +150,8 @@ class IntegrationMongoStreamsSpec extends Specification {
   }
 
   "One to many join through sChannel with raw objects" in new MongoStreamsEnviroment {
-    initMongo
-    val buffer = Buffer.empty[String]
+    initMongo()
+    val buffer = mutable.Buffer.empty[String]
     val Sink = io.fillBuffer(buffer)
     implicit val cl = client
 

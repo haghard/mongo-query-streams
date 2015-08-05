@@ -25,6 +25,7 @@ import mongo.query.{ DBChannel, DBChannelFactory, QuerySetting }
 import org.apache.log4j.Logger
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.collection.mutable.{ Buffer, ArrayBuffer }
 import scalaz.stream.Process._
 import scalaz.{ -\/, \/-, \/ }
@@ -36,7 +37,7 @@ object MongoIntegrationEnv {
 
   private val logger = org.apache.log4j.Logger.getLogger("mongo-streams")
 
-  implicit val executor = Executors.newFixedThreadPool(5, new NamedThreadFactory("mongo-test-worker"))
+  implicit val executor = Executors.newFixedThreadPool(8, new NamedThreadFactory("mongo-test-worker"))
 
   val categoryIds = lift { obj: DBObject ⇒
     (obj.get("name").asInstanceOf[String],
@@ -54,9 +55,10 @@ object MongoIntegrationEnv {
   val PRODUCER = "producer"
   val PROGRAMMERS = "programmers"
   val LANGS = "langs"
+  val ITEMS = "items"
 
   def sinkWithBuffer[T] = {
-    val buffer: Buffer[T] = Buffer.empty
+    val buffer = mutable.Buffer.empty[T]
     (scalaz.stream.io.fillBuffer(buffer), buffer)
   }
 
@@ -74,6 +76,11 @@ object MongoIntegrationEnv {
 
     val langsC = client.getDB(TEST_DB).getCollection(LANGS)
     val programmers = client.getDB(TEST_DB).getCollection(PROGRAMMERS)
+    val itemC = client.getDB(TEST_DB).getCollection(ITEMS)
+
+    for (i ← 1 to 150) {
+      itemC.insert(new BasicDBObject("index", i).append("name", "temp_v"))
+    }
 
     for ((v, i) ← langs.zipWithIndex) {
       langsC.insert(new BasicDBObject("index", i).append("name", v)
@@ -117,8 +124,8 @@ object MongoIntegrationEnv {
 
   def mockDB()(implicit executor: java.util.concurrent.ExecutorService): scalaz.stream.Process[Task, DB] = {
     scalaz.stream.io.resource(Task.delay(prepareMockMongo()))(rs ⇒ Task.delay {
-      rs._1.close
-      rs._2.shutdownNow
+      rs._1.close()
+      rs._2.shutdownNow()
       logger.debug(s"mongo-client ${rs._1.##} has been closed")
     }) { rs ⇒
       var obtained = false
@@ -150,14 +157,14 @@ object MongoIntegrationEnv {
                     val collection = db.getCollection(setting.cName)
                     var cursor = collection.find(setting.q)
                     cursor = setting.readPref.fold(cursor) { p ⇒ cursor.setReadPreference(p.asMongoDbReadPreference) }
-                    setting.sortQuery.foreach(cursor.sort(_))
-                    setting.skip.foreach(cursor.skip(_))
-                    setting.limit.foreach(cursor.limit(_))
+                    setting.sortQuery.foreach(cursor.sort)
+                    setting.skip.foreach(cursor.skip)
+                    setting.limit.foreach(cursor.limit)
                     setting.maxTimeMS.foreach(cursor.maxTime(_, TimeUnit.MILLISECONDS))
                     val rpLine = setting.readPref.fold("Empty") { p ⇒ p.asMongoDbReadPreference.toString }
                     logger.debug(s"Cursor:${cursor.##} ReadPref:[$rpLine}] Server:[${cursor.getServerAddress}] Sort:[${setting.sortQuery}] Skip:[${setting.skip}] Query:[${setting.q}]")
                     cursor
-                  })(cursor ⇒ Task.delay(cursor.close)) { c ⇒
+                  })(cursor ⇒ Task.delay(cursor.close())) { c ⇒
                     Task.delay {
                       if (c.hasNext) {
                         Thread.sleep(200) //for test
