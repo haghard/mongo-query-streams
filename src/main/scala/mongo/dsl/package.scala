@@ -216,16 +216,6 @@ package object dsl { outer ⇒
     val intInterpreter: Interaction.InteractionApp ~> Id = BatchQueryTransformation ||: ApacheLog4jTransformation ||: qInterpreterFree
     val intInterpreterCoyo: Interaction.CoyoApp ~> Id = liftCoyoLeft(intInterpreter)
 
-    trait Streamer[M[_]] {
-      protected val logger = org.apache.log4j.Logger.getLogger("streamer-query")
-      def create[T](q: QuerySettings, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): M[T]
-    }
-
-    trait ChannelStreamer[M[_]] {
-      protected val logger = org.apache.log4j.Logger.getLogger("streamer-channel-query")
-      def create[T](q: QuerySettings, db: String, coll: String)(implicit pool: ExecutorService): M[T]
-    }
-
     private[dsl] def mongoResource[T](qs: QuerySettings, client: MongoClient, db: String, collection: String, log: org.apache.log4j.Logger)(implicit pool: ExecutorService): Process[Task, T] = {
       io.resource(Task.delay {
         val coll = client.getDB(db).getCollection(collection)
@@ -245,6 +235,11 @@ package object dsl { outer ⇒
       }
     }
 
+    trait ChannelStreamer[M[_]] {
+      protected val logger = org.apache.log4j.Logger.getLogger("streamer-channel-query")
+      def create[T](q: QuerySettings, db: String, coll: String)(implicit pool: ExecutorService): M[T]
+    }
+
     object ChannelStreamer {
       implicit object channelStreamerProc extends ChannelStreamer[MStream] {
         override def create[T](q: QuerySettings, db: String, coll: String)(implicit pool: ExecutorService): MStream[T] =
@@ -252,6 +247,11 @@ package object dsl { outer ⇒
             Task(mongoResource[T](q, client, db, coll, logger))
           }))
       }
+    }
+
+    trait Streamer[M[_]] {
+      protected val logger = org.apache.log4j.Logger.getLogger("streamer-query")
+      def create[T](q: QuerySettings, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): M[T]
     }
 
     object Streamer {
@@ -291,7 +291,6 @@ package object dsl { outer ⇒
                   } else subscriber.onCompleted()
                 }
               }
-
               override def request(n: Long): Unit = go(n)
             })
           }.subscribeOn(ExecutionContextScheduler(ExecutionContext.fromExecutor(pool)))
