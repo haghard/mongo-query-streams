@@ -269,9 +269,9 @@ package object dsl { outer ⇒
                 Option {
                   val coll = client.getDB(db).getCollection(collection)
                   val cursor = coll.find(qs.q)
-                  qs.sort.foreach(cursor.sort(_))
-                  qs.skip.foreach(cursor.skip(_))
-                  qs.limit.foreach(cursor.limit(_))
+                  qs.sort.foreach(cursor.sort)
+                  qs.skip.foreach(cursor.skip)
+                  qs.limit.foreach(cursor.limit)
                   logger.debug(s"Query-settings: Sort:[ ${qs.sort} ] Skip:[ ${qs.skip} ] Limit:[ ${qs.limit} ] Query:[ ${qs.q} ]")
                   cursor
                 }
