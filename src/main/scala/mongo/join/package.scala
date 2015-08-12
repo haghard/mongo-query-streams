@@ -50,23 +50,15 @@ package object join {
    * @tparam T The type for db streamer
    */
   abstract class Joiner[T <: DBModule] {
-    protected var log: Logger = _
+    protected var logger: Logger = _
     protected var client: T#Client = _
     protected var exec: ExecutorService = _
     private val initQ = new com.mongodb.BasicDBObject
     private val init = QuerySettings(initQ)
 
-    def withClient(client: T#Client) = {
+    def create(client: T#Client, log: Logger, ex: ExecutorService): Joiner[T] = {
       this.client = client
-      this
-    }
-
-    def withLogger(log: Logger) = {
-      this.log = log
-      this
-    }
-
-    def withExecutor(ex: ExecutorService): Joiner[T] = {
+      this.logger = log
       exec = ex
       this
     }
@@ -132,12 +124,11 @@ package object join {
   }
 
   object Joiner {
-    def apply[T <: DBModule](implicit j: Joiner[T], c: T#Client, log: Logger, pool: ExecutorService): Joiner[T] =
-      j.withExecutor(pool).withLogger(log).withClient(c)
+    def apply[T <: DBModule](implicit joiner: Joiner[T], client: T#Client, log: Logger, pool: ExecutorService): Joiner[T] =
+      joiner.create(client, log, pool)
   }
 
   case class Join[T <: DBModule: Joiner](implicit pool: ExecutorService, c: T#Client, t: ClassTag[T]) {
-
     implicit val logger = Logger.getLogger(s"${t.runtimeClass.getName.dropWhile(_ != '$').drop(1)}-Joiner")
 
     private val joiner = Joiner[T]

@@ -41,13 +41,13 @@ package object process {
           qs.sort.foreach(q ⇒ cursor.sort(q))
           qs.skip.foreach(n ⇒ cursor.skip(n))
           qs.limit.foreach(n ⇒ cursor.limit(n))
-          log.debug(s"Query-settings: Sort:[ ${qs.sort} ] Skip:[ ${qs.skip} ] Limit:[ ${qs.limit} ] Query:[ ${qs.q} ]")
+          logger.debug(s"Query-settings: Sort:[ ${qs.sort} ] Skip:[ ${qs.skip} ] Limit:[ ${qs.limit} ] Query:[ ${qs.q} ]")
           cursor
         })(c ⇒ Task.delay(c.close())) { c ⇒
           Task {
             if (c.hasNext) {
               val r = c.next
-              log.debug(s"fetch $r")
+              logger.debug(s"fetch $r")
               r.asInstanceOf[T]
             } else throw Cause.Terminated(Cause.End)
           }(exec)
@@ -80,9 +80,9 @@ package object process {
             Task(resource(createQuery(r(topRecord)), client, db, collection))
           }))
 
-      override def innerJoin[A, B, C](l: MongoProcess#DBStream[A])(relation: A ⇒ MongoProcess#DBStream[B])(f: (A, B) ⇒ C): MongoProcess#DBStream[C] =
+      override def innerJoin[A, B, C](outer: MongoProcess#DBStream[A])(relation: A ⇒ MongoProcess#DBStream[B])(f: (A, B) ⇒ C): MongoProcess#DBStream[C] =
         for {
-          id ← l
+          id ← outer
           rs ← relation(id) |> lift(f(id, _))
         } yield rs
     }

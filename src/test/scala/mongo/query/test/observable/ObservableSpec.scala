@@ -14,11 +14,11 @@
 
 package mongo.query.test.observable
 
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{ AtomicLong, AtomicInteger }
 import java.util.concurrent.CountDownLatch
 
 import com.mongodb.DBObject
-import mongo.query.test.{ MongoIntegrationEnv, MongoStreamsEnviroment }
+import mongo.query.test.{ MongoStreamsEnviroment, MongoIntegrationEnv }
 import org.specs2.mutable.Specification
 import rx.lang.scala.schedulers.ExecutionContextScheduler
 import rx.lang.scala.{ Observable, Subscriber }
@@ -40,38 +40,35 @@ class ObservableSpec extends Specification {
     initMongo()
 
     implicit val cl = client
-    val c = new CountDownLatch(1)
+    val latch = new CountDownLatch(1)
     val mongoQuery = for { ex ← "index" $gte 0 } yield ex
 
-    val responses = new AtomicInteger(0)
-
+    val counter = new AtomicLong(0)
     val s = new rx.lang.scala.Subscriber[DBObject] {
-      val batchSize = 7
-      override def onStart() = request(batchSize)
+      val pageSize = 8
+      override def onStart() = request(pageSize)
       override def onNext(n: DBObject) = {
-        logger.info(s"onNext $n")
-        if (responses.incrementAndGet() % batchSize == 0) {
-          logger.info(s"★ ★ ★ ★ ★ ★   Page:[$batchSize]  ★ ★ ★ ★ ★ ★ ")
-          request(batchSize)
+        logger.info(s"$n")
+        if (counter.incrementAndGet() % pageSize == 0) {
+          logger.info(s"★ ★ ★ ★ ★ ★   Page:[$pageSize]  ★ ★ ★ ★ ★ ★ ")
+          request(pageSize)
         }
       }
-      override def onError(e: Throwable) = {
-        logger.info("streaming error")
-        c.countDown()
-      }
-      override def onCompleted() = {
-        logger.info("streaming has been completed")
-        c.countDown()
-      }
+      override def onError(e: Throwable) = latch.countDown()
+      override def onCompleted() = latch.countDown()
     }
 
-    mongoQuery.stream[Observable](TEST_DB, ITEMS).observeOn(RxExecutor).subscribe(s)
-    c.await()
-    MongoIntegrationEnv.itemsSize === responses.get()
+    mongoQuery.stream[Observable](TEST_DB, ITEMS)
+      .observeOn(RxExecutor)
+      .subscribe(s)
+
+    latch.await()
+    counter.get() === MongoIntegrationEnv.itemsSize
   }
 
   "One to many join through stream with fixed columns" in new MongoStreamsEnviroment {
-    initMongo
+    initMongo()
+    
     val buffer = mutable.Buffer.empty[String]
     val Sink = io.fillBuffer(buffer)
     implicit val cl = client
@@ -85,7 +82,7 @@ class ObservableSpec extends Specification {
     val joinFlow = mongoQuery.stream[Observable](TEST_DB, LANGS).column[Int]("index")
       .innerJoin(qProgByLang(_).stream[Observable](TEST_DB, PROGRAMMERS).column[String]("name")) { (ind, p) ⇒ s"[lang:$ind/person:$p]" }
 
-    val s = new Subscriber[String] {
+    val S = new Subscriber[String] {
       override def onStart() = request(1)
       override def onNext(n: String): Unit = {
         logger.info(s"receive $n")
@@ -102,13 +99,14 @@ class ObservableSpec extends Specification {
       }
     }
 
-    joinFlow.observeOn(RxExecutor).subscribe(s)
+    joinFlow.observeOn(RxExecutor).subscribe(S)
     c.await()
-    10 === responses.get()
+    responses.get() === MongoIntegrationEnv.progSize
   }
 
   "One to many join through stream with raw objects" in new MongoStreamsEnviroment {
-    initMongo
+    initMongo()
+    
     val buffer = mutable.Buffer.empty[String]
     val Sink = io.fillBuffer(buffer)
     implicit val cl = client
@@ -120,7 +118,7 @@ class ObservableSpec extends Specification {
     val sb = new StringBuilder()
     var responses = new AtomicInteger(0)
 
-    val s = new Subscriber[String] {
+    val S = new Subscriber[String] {
       override def onStart(): Unit = request(1)
       override def onNext(n: String): Unit = {
         logger.info(s"receive $n")
@@ -142,8 +140,8 @@ class ObservableSpec extends Specification {
       s"[lang:${l.get("name").asInstanceOf[String]}/person:${r.get("name").asInstanceOf[String]}]"
     }
 
-    joinFlow.observeOn(RxExecutor).subscribe(s)
+    joinFlow.observeOn(RxExecutor).subscribe(S)
     c.await()
-    10 === responses.get()
+    responses.get() === MongoIntegrationEnv.progSize
   }
 }

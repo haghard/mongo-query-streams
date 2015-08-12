@@ -27,6 +27,8 @@ import scalaz.stream.{ io, Process }
 
 import mongo.join.process.MongoProcess
 import mongo.join.observable.MongoObservable
+import rx.lang.scala.Subscriber
+import rx.lang.scala.schedulers.ExecutionContextScheduler
 
 class JoinerSpec extends Specification {
   import mongo._
@@ -60,8 +62,8 @@ class JoinerSpec extends Specification {
       _ ← e to Sink
     } yield ()
 
-    p.run.run
-    buffer.size === 10
+    p.runLog.run
+    buffer.size === MongoIntegrationEnv.progSize
   }
 
   "Build join with Process" in new MongoStreamsEnviroment {
@@ -85,20 +87,21 @@ class JoinerSpec extends Specification {
       _ ← e to Sink
     } yield ()
 
-    p.run.run
-    buffer.size === 10
+    p.runLog.run
+    buffer.size === MongoIntegrationEnv.progSize
   }
 
   "Build joinByPk with Observable" in new MongoStreamsEnviroment {
-    import rx.lang.scala.Subscriber
-    import rx.lang.scala.schedulers.ExecutionContextScheduler
-
     initMongo
 
     val count = new CountDownLatch(1)
     val responses = new AtomicLong(0)
 
-    val qLang = for { q ← "index" $gte 0 $lte 5 } yield q
+    val qLang = for {
+      _ ← "index" $gte 0 $lte 5
+      q ← limit(5)
+    } yield q
+
     def qProg(id: Int) = for { q ← "lang" $eq id } yield q
 
     implicit val c = client
@@ -108,10 +111,10 @@ class JoinerSpec extends Specification {
       s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
     }
 
-    val testSubs = new Subscriber[String] {
+    val S = new Subscriber[String] {
       override def onStart(): Unit = request(1)
       override def onNext(n: String): Unit = {
-        logger.info(s"receive $n")
+        logger.info(s"onNext $n")
         responses.incrementAndGet()
         request(1)
       }
@@ -126,16 +129,13 @@ class JoinerSpec extends Specification {
     }
 
     query.observeOn(ExecutionContextScheduler(ExecutionContext.fromExecutor(executor)))
-      .subscribe(testSubs)
+      .subscribe(S)
 
     count.await()
-    responses.get === 10
+    responses.get === MongoIntegrationEnv.progSize
   }
 
   "Build join with Observable" in new MongoStreamsEnviroment {
-    import rx.lang.scala.Subscriber
-    import rx.lang.scala.schedulers.ExecutionContextScheduler
-
     initMongo
 
     val count = new CountDownLatch(1)
@@ -172,6 +172,6 @@ class JoinerSpec extends Specification {
       .subscribe(testSubs)
 
     count.await()
-    responses.get === 10
+    responses.get === MongoIntegrationEnv.progSize
   }
 }

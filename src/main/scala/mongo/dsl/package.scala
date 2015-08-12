@@ -251,50 +251,54 @@ package object dsl { outer ⇒
 
     trait Streamer[M[_]] {
       def logger: org.apache.log4j.Logger
-      def create[T](q: QuerySettings, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): M[T]
+      def create[T](q: QuerySettings, client: MongoClient, db: String, c: String)(implicit pool: ExecutorService): M[T]
     }
 
     object Streamer {
       implicit object ProcStreamer extends Streamer[MProcess] {
         override val logger = org.apache.log4j.Logger.getLogger("Process-Producer")
-        override def create[T](q: QuerySettings, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): MProcess[T] =
-          mongoResource[T](q, client, db, coll, logger)
+        override def create[T](q: QuerySettings, client: MongoClient, db: String, c: String)(implicit pool: ExecutorService): MProcess[T] =
+          mongoResource[T](q, client, db, c, logger)
       }
 
       implicit object RxStreamer extends Streamer[Observable] {
         import com.mongodb.{ MongoClient, DBCursor }
         override val logger = org.apache.log4j.Logger.getLogger("Observable-Producer")
 
-        override def create[T](qs: QuerySettings, client: MongoClient, db: String, collection: String)(implicit pool: ExecutorService): Observable[T] = {
+        override def create[T](qs: QuerySettings, client: MongoClient, db: String, c: String)(implicit pool: ExecutorService): Observable[T] = {
           Observable { subscriber: Subscriber[T] ⇒
-            subscriber.setProducer(new Producer() {
-              lazy val cursor: Option[DBCursor] = (Try {
-                Option {
-                  val coll = client.getDB(db).getCollection(collection)
-                  val cursor = coll.find(qs.q)
-                  qs.sort.foreach(cursor.sort)
-                  qs.skip.foreach(cursor.skip)
-                  qs.limit.foreach(cursor.limit)
-                  logger.debug(s"Query-settings: Sort:[ ${qs.sort} ] Skip:[ ${qs.skip} ] Limit:[ ${qs.limit} ] Query:[ ${qs.q} ]")
-                  cursor
-                }
-              } recover {
-                case e: Throwable ⇒
-                  subscriber.onError(e)
-                  None
-              }).get
-
-              @tailrec def go(n: Long): Unit = {
-                if (n > 0) {
-                  if (cursor.find(_.hasNext).isDefined) {
-                    val r = cursor.get.next().asInstanceOf[T]
-                    logger.info(s"fetch $r")
-                    subscriber.onNext(r)
-                    go(n - 1)
-                  } else subscriber.onCompleted()
-                }
+            val pageSize = 8
+            lazy val cursor: Option[DBCursor] = (Try {
+              Option {
+                val cursor = client.getDB(db).getCollection(c).find(qs.q)
+                qs.sort.foreach(cursor.sort)
+                qs.skip.foreach(cursor.skip)
+                qs.limit.foreach(cursor.limit)
+                logger.debug(s"Query-settings: Sort:[ ${qs.sort} ] Skip:[ ${qs.skip} ] Limit:[ ${qs.limit} ] Query:[ ${qs.q} ]")
+                cursor
               }
-              override def request(n: Long): Unit = go(n)
+            } recover {
+              case e: Throwable ⇒
+                subscriber.onError(e)
+                None
+            }).get
+
+            @scala.annotation.tailrec def go(n: Int, i: Int, c: DBCursor): Unit = {
+              if (i < n && c.hasNext && !subscriber.isUnsubscribed) {
+                val r = c.next().asInstanceOf[T]
+                logger.info(s"fetch $r")
+                subscriber.onNext(r)
+                go(n, i + 1, c)
+              }
+            }
+
+            subscriber.setProducer(n ⇒ {
+              val intN = if (n >= pageSize) pageSize else n.toInt
+              //logger.info(s"★ Request:$n $intN ★")
+              if (cursor.isDefined) {
+                if (cursor.get.hasNext) go(intN, 0, cursor.get)
+                else subscriber.onCompleted()
+              }
             })
           }.subscribeOn(ExecutionContextScheduler(ExecutionContext.fromExecutor(pool)))
         }
@@ -362,7 +366,7 @@ package object dsl { outer ⇒
     /**
      * Works with [[mongo.dsl.MProcess]], [[rx.lang.scala.Observable]] types
      * @param db
-     * @param collection
+     * @param c
      * @param pool
      * @param client
      * @tparam M
@@ -370,9 +374,9 @@ package object dsl { outer ⇒
      */
     //M[_]: scalaz.Monad
     //val m = implicitly[scalaz.Monad[M]]
-    def stream[M[_]: Streamer](db: String, collection: String)(implicit pool: ExecutorService, client: MongoClient): M[DBObject] = {
+    def stream[M[_]: Streamer](db: String, c: String)(implicit pool: ExecutorService, client: MongoClient): M[DBObject] = {
       implicitly[Streamer[M]].create(
-        runFC[StatementOp, QueryS, QuerySettings](self)(QueryInterpreter).run(outer.qb.init)._1, client, db, collection)
+        runFC[StatementOp, QueryS, QuerySettings](self)(QueryInterpreter).run(outer.qb.init)._1, client, db, c)
     }
   }
 }

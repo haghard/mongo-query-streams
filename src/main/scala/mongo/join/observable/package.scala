@@ -22,7 +22,6 @@ import scala.concurrent.ExecutionContext
 import scala.util.Try
 import rx.lang.scala.schedulers.ExecutionContextScheduler
 import rx.lang.scala.{ Observable, Subscriber }
-import rx.lang.scala.Producer
 
 package object observable {
   import qb._
@@ -36,29 +35,40 @@ package object observable {
   }
 
   object MongoObservable {
+
     trait Fetcher[T] {
       def db: String
       def coll: String
-      def q: MongoObservable#DBRecord
       def c: MongoObservable#Client
       def log: Logger
+      def setting: MongoObservable#QuerySettings
       def subscriber: Subscriber[T]
 
+      private val pageSize = 8
+
       lazy val cursor: Option[MongoObservable#Cursor] = (Try {
-        Option(c.getDB(db).getCollection(coll).find(q))
+        Option {
+          import scalaz.syntax.id._
+          val cursor = c.getDB(db).getCollection(coll).find(setting.q)
+          cursor |> { c ⇒
+            setting.sort.foreach(c.sort)
+            setting.limit.foreach(c.limit)
+            setting.skip.foreach(c.skip)
+          }
+          log.debug(s"Query-settings: Sort:[ ${setting.sort} ] Skip:[ ${setting.skip} ] Limit:[ ${setting.limit} ] Query:[ ${setting.q} ]")
+          cursor
+        }
       } recover {
         case e: Throwable ⇒
           subscriber.onError(e)
           None
       }).get
 
-      @tailrec private def go(n: Long): Unit = {
-        log.info(s"request $n")
-        if (n > 0) {
-          if (cursor.find(_.hasNext()).isDefined) {
-            subscriber.onNext(extract(cursor.get))
-            go(n - 1)
-          } else subscriber.onCompleted()
+      @tailrec private def fetch(n: Int, i: Int, c: MongoObservable#Cursor): Unit = {
+        if (i < n && c.hasNext && !subscriber.isUnsubscribed) {
+          val r = extract(c)
+          subscriber.onNext(r)
+          fetch(n, i + 1, c)
         }
       }
 
@@ -68,13 +78,15 @@ package object observable {
         r
       }
 
-      def fetch(n: Long): Unit = go(n)
-    }
-
-    class QueryProducer[T](val subscriber: Subscriber[T], val db: String, val coll: String,
-                           val q: MongoObservable#DBRecord, val c: MongoObservable#Client, val log: Logger) extends Producer {
-      self: Fetcher[T] ⇒
-      override def request(n: Long) = fetch(n)
+      def producer: (Long) ⇒ Unit =
+        n ⇒ {
+          val intN = if (n >= pageSize) pageSize else n.toInt
+          //log.info(s"★ Request:$n $intN ★")
+          if (cursor.isDefined) {
+            if (cursor.get.hasNext) fetch(intN, 0, cursor.get)
+            else subscriber.onCompleted()
+          }
+        }
     }
 
     trait PKFetcher[T] extends Fetcher[T] {
@@ -86,25 +98,38 @@ package object observable {
     implicit object joiner extends Joiner[MongoObservable] {
       val scheduler = ExecutionContextScheduler(ExecutionContext.fromExecutor(exec))
 
-      private def resource[A](q: MongoObservable#QuerySettings, db: String, collection: String): Observable[A] = {
-        log.info(s"[$db - $collection] Query: $q")
-        Observable { subscriber: Subscriber[A] ⇒
-          subscriber.setProducer(new QueryProducer[A](subscriber, db, collection, q.q, client, log) with Fetcher[A])
+      private def resource[A](qs: MongoObservable#QuerySettings, db0: String, c0: String): Observable[A] = {
+        logger.info(s"[$db0 - $c0] Query: $qs")
+        Observable { subscriber0: Subscriber[A] ⇒
+          subscriber0.setProducer(new Fetcher[A] {
+            override def db = db0
+            override def subscriber = subscriber0
+            override def log = logger
+            override def coll = c0
+            override def setting = qs
+            override def c = client
+          }.producer)
         }.subscribeOn(scheduler)
       }
 
-      private def typedResource[A](q: MongoObservable#QuerySettings, db: String, collection: String, keyField: String): Observable[A] = {
-        log.info(s"[$db - $collection] Query: $q")
-        Observable { subscriber: Subscriber[A] ⇒
-          subscriber.setProducer(new QueryProducer[A](subscriber, db, collection, q.q, client, log) with PKFetcher[A] {
-            override val key = keyField
-          })
+      private def resource2[A](qs: MongoObservable#QuerySettings, db0: String, c0: String, keyField: String): Observable[A] = {
+        logger.info(s"[$db0 - $c0] Query: $qs")
+        Observable { subscriber0: Subscriber[A] ⇒
+          subscriber0.setProducer(new PKFetcher[A] {
+            override def key = keyField
+            override def subscriber = subscriber0
+            override def log = logger
+            override def coll = c0
+            override def db = db0
+            override def setting = qs
+            override def c = client
+          }.producer)
         }.subscribeOn(scheduler)
       }
 
       override def leftField[A](query: QueryFree[MongoObservable#QuerySettings],
                                 db: String, collection: String, key: String): MongoObservable#DBStream[A] =
-        typedResource[A](createQuery(query), db, collection, key)
+        resource2[A](createQuery(query), db, collection, key)
 
       override def left(query: QueryFree[MongoObservable#QuerySettings],
                         db: String, collection: String): Observable[MongoObservable#DBRecord] =
@@ -136,9 +161,9 @@ package object observable {
         id ⇒
           resource[MongoObservable#DBRecord](createQuery(r(id)), db, collection)
 
-      override def innerJoin[A, B, C](left: Observable[A])(relation: (A) ⇒ Observable[B])(f: (A, B) ⇒ C): MongoObservable#DBStream[C] =
+      override def innerJoin[A, B, C](outer: Observable[A])(relation: (A) ⇒ Observable[B])(f: (A, B) ⇒ C): MongoObservable#DBStream[C] =
         for {
-          id ← left
+          id ← outer
           rs ← relation(id).map(f(id, _))
         } yield rs
     }
