@@ -67,7 +67,8 @@ object MongoIntegrationEnv {
 
   def LoggerSinkEither(logger: Logger): scalaz.stream.Sink[Task, String \/ Int] =
     scalaz.stream.sink.lift[Task, String \/ Int](o ⇒ Task.delay(logger.debug(s"Result:  $o")))
-
+  
+  val itemsSize = 150
   private[test] def prepareMockMongo(): (MongoClient, MongoServer) = {
     val server = new MongoServer(new MemoryBackend())
     val serverAddress = server.bind()
@@ -78,7 +79,7 @@ object MongoIntegrationEnv {
     val programmers = client.getDB(TEST_DB).getCollection(PROGRAMMERS)
     val itemC = client.getDB(TEST_DB).getCollection(ITEMS)
 
-    for (i ← 1 to 150) {
+    for (i ← 1 to itemsSize) {
       itemC.insert(new BasicDBObject("index", i).append("name", "temp_v"))
     }
 

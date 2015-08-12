@@ -49,7 +49,7 @@ class ObservableSpec extends Specification {
       val batchSize = 7
       override def onStart() = request(batchSize)
       override def onNext(n: DBObject) = {
-        logger.info(s"$n")
+        logger.info(s"onNext $n")
         if (responses.incrementAndGet() % batchSize == 0) {
           logger.info(s"★ ★ ★ ★ ★ ★   Page:[$batchSize]  ★ ★ ★ ★ ★ ★ ")
           request(batchSize)
@@ -67,7 +67,7 @@ class ObservableSpec extends Specification {
 
     mongoQuery.stream[Observable](TEST_DB, ITEMS).observeOn(RxExecutor).subscribe(s)
     c.await()
-    150 === responses.get()
+    MongoIntegrationEnv.itemsSize === responses.get()
   }
 
   "One to many join through stream with fixed columns" in new MongoStreamsEnviroment {

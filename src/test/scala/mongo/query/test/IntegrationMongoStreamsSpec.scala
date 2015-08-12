@@ -24,7 +24,7 @@ import scalaz.concurrent.Task
 import scalaz.stream.io
 
 trait MongoStreamsEnviroment extends org.specs2.mutable.After {
-  val logger = org.apache.log4j.Logger.getLogger("MongoStreams-Enviroment")
+  val logger = org.apache.log4j.Logger.getLogger("Observable-Consumer")
   var client: MongoClient = _
   var server: MongoServer = _
 

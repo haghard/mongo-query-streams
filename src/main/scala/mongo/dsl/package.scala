@@ -250,18 +250,21 @@ package object dsl { outer ⇒
     }
 
     trait Streamer[M[_]] {
-      protected val logger = org.apache.log4j.Logger.getLogger("streamer-query")
+      def logger: org.apache.log4j.Logger // = org.apache.log4j.Logger.getLogger("streamer-query")
       def create[T](q: QuerySettings, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): M[T]
     }
 
     object Streamer {
       implicit object ProcStreamer extends Streamer[MProcess] {
+        override val logger = org.apache.log4j.Logger.getLogger("Process-Producer")
         override def create[T](q: QuerySettings, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): MProcess[T] =
           mongoResource[T](q, client, db, coll, logger)
       }
 
       implicit object RxStreamer extends Streamer[Observable] {
         import com.mongodb.{ MongoClient, DBCursor }
+        override val logger = org.apache.log4j.Logger.getLogger("Observable-Producer")
+
         override def create[T](qs: QuerySettings, client: MongoClient, db: String, collection: String)(implicit pool: ExecutorService): Observable[T] = {
           Observable { subscriber: Subscriber[T] ⇒
             subscriber.setProducer(new Producer() {
