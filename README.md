@@ -149,11 +149,11 @@ Here's a basic example how to build query, run and get results:
    
 ```
 
-Big win there is that `products` value incapsulates a full interaction lifecycle for with mongo client (get db by name, get collection by name, submit query with preferences, fetch records from cursor, close the cursor). If exception occurs cursor will be closed.
+Big win here is that `products` value incapsulates a full interaction lifecycle for with mongo client (get db by name, get collection by name, submit query with preferences, fetch records from cursor, close the cursor). If exception occurs cursor will close.
 
-We do support join between 2 collections and 2 different streaming library [RxScala](https://github.com/ReactiveX/RxScala.git) and [ScalazStream](https://github.com/scalaz/scalaz-stream) through single type `mongo.join.Join` which can by parametrized with `MongoProcessStream` and `MongoObservableStream`   
+We do support join between 2 collections and 2 different streaming library [RxScala](https://github.com/ReactiveX/RxScala.git) and [ScalazStream](https://github.com/scalaz/scalaz-stream) through single type `mongo.join.Join` which can by parametrized with `MongoProcess` and `MongoObservable`   
 
-We have two methods for join collections: `joinByPk` and `join`. If you fine with output type from left stream only with key field you should use `joinByPk`. If you aren't, than use `join` for unlimited possibilities in output type.
+We have two methods for join collections: `joinByPk` and `join`. If you ok with output type from left stream only with key field you should use `joinByPk`. If you aren't, than use `join` for unlimited opportunities in output record.
      
 Here's a example of how you can do joinByPk between collections `LANGS` and `PROGRAMMERS` by `LANGS.index == PROGRAMMERS.lang` using `Scalaz Streams`
 
@@ -177,7 +177,7 @@ Here's a example of how you can do joinByPk between collections `LANGS` and `PRO
   
   implicit val exec = newFixedThreadPool(2, new NamedThreadFactory("db-worker"))
   implicit val c = client
-  val joiner = Join[MongoProcessStream]
+  val joiner = Join[MongoProcess]
       
   val query = joiner.joinByPk(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
     s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
@@ -217,7 +217,7 @@ Join using `rx.lang.scala.Observable`
   
   implicit val exec = newFixedThreadPool(2, new NamedThreadFactory("db-worker"))
   implicit val c = client
-  val joiner = Join[MongoObservableStream]
+  val joiner = Join[MongoObservable]
   
   val query = joiner.joinByPk(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
     s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
