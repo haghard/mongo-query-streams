@@ -250,7 +250,7 @@ package object dsl { outer ⇒
     }
 
     trait Streamer[M[_]] {
-      def logger: org.apache.log4j.Logger // = org.apache.log4j.Logger.getLogger("streamer-query")
+      def logger: org.apache.log4j.Logger
       def create[T](q: QuerySettings, client: MongoClient, db: String, coll: String)(implicit pool: ExecutorService): M[T]
     }
 
