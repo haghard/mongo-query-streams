@@ -232,7 +232,7 @@ package object query {
     def build(): String \/ QuerySetting
   }
 
-  def create[T](f: MutableBuilder ⇒ Unit)(implicit pool: ExecutorService, q: DBChannelFactory[T]): DBChannel[T, DBObject] = {
+  def create[T](f: MutableBuilder ⇒ Unit)(implicit pool: ExecutorService, factory: DBChannelFactory[T]): DBChannel[T, DBObject] = {
     val builder = new MutableBuilder {
       override def build(): String \/ QuerySetting =
         for {
@@ -244,39 +244,38 @@ package object query {
         } yield QuerySetting(q, db, c, s, limit, skip, maxTimeMS, readPreference)
     }
     f(builder)
-    q createChannel builder.build
+    factory createChannel builder.build
   }
 
   //default
-  implicit object default extends DBChannelFactory[MongoClient] {
-    override def createChannel(arg: String \/ QuerySetting)(implicit s: ExecutorService): DBChannel[MongoClient, DBObject] = {
-      arg match {
-        case \/-(qs) ⇒
-          DBChannel(eval(Task.now { client: MongoClient ⇒
-            Task {
-              val logger = Logger.getLogger("mongo-streamer")
-              scalaz.stream.io.resource(
-                Task delay {
-                  val collection = client.getDB(qs.db).getCollection(qs.cName)
-                  var cursor = collection.find(qs.q)
-                  cursor = qs.readPref.fold(cursor) { p ⇒ cursor.setReadPreference(p.asMongoDbReadPreference) }
-                  qs.sortQuery.foreach(q ⇒ cursor.sort(q))
-                  qs.skip.foreach(n ⇒ cursor.skip(n))
-                  qs.limit.foreach(n ⇒ cursor.limit(n))
-                  qs.maxTimeMS.foreach(cursor.maxTime(_, TimeUnit.MILLISECONDS))
-                  val rpLine = qs.readPref.fold("Empty") { p ⇒ p.asMongoDbReadPreference.toString }
-                  logger.debug(s"Query:[${qs.q}] ReadPrefs:[$rpLine}] Sort:[${qs.sortQuery}] Limit:[${qs.limit}] Skip:[${qs.skip}]")
-                  cursor
-                })(c ⇒ Task.delay(c.close())) { c ⇒
-                  Task.delay {
-                    if (c.hasNext) c.next
-                    else throw Cause.Terminated(Cause.End)
-                  }
+  implicit object defaultChannel extends DBChannelFactory[MongoClient] {
+    override def createChannel(arg: String \/ QuerySetting)(implicit ES: ExecutorService): DBChannel[MongoClient, DBObject] = {
+      arg.fold({ error ⇒ DBChannel(eval(Task.fail(new MongoException(error)))) }, { qs ⇒
+        DBChannel(eval(Task.now { client: MongoClient ⇒
+          Task {
+            val logger = Logger.getLogger("mongo-channel")
+            scalaz.stream.io.resource(
+              Task delay {
+                val collection = client.getDB(qs.db).getCollection(qs.cName)
+                val cursor = collection.find(qs.q)
+                scalaz.syntax.id.ToIdOpsDeprecated(cursor) |> { c ⇒
+                  qs.readPref.fold(c)(p ⇒ c.setReadPreference(p.asMongoDbReadPreference))
+                  qs.sortQuery.foreach(c.sort)
+                  qs.skip.foreach(c.skip)
+                  qs.limit.foreach(c.limit)
+                  qs.maxTimeMS.foreach(c.maxTime(_, TimeUnit.MILLISECONDS))
                 }
-            }
-          }))
-        case -\/(error) ⇒ DBChannel(eval(Task.fail(new MongoException(error))))
-      }
+                logger.debug(s"Query:[${qs.q}] ReadPrefs:[${cursor.getReadPreference}] Sort:[${qs.sortQuery}] Limit:[${qs.limit}] Skip:[${qs.skip}]")
+                cursor
+              })(c ⇒ Task.delay(c.close())) { c ⇒
+                Task.delay {
+                  if (c.hasNext) c.next
+                  else throw Cause.Terminated(Cause.End)
+                }
+              }
+          }(ES)
+        }))
+      })
     }
   }
 }

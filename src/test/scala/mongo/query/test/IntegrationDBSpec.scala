@@ -37,9 +37,9 @@ trait Enviroment[T] extends org.specs2.mutable.Before {
   override def before = Resource
 }
 
-class IntegrationMongoCleanUpSpec extends Specification {
+class IntegrationMongoDBSpec extends Specification {
   import MongoIntegrationEnv._
-  private val logger = Logger.getLogger(classOf[IntegrationMongoCleanUpSpec])
+  private val logger = Logger.getLogger(classOf[IntegrationMongoDBSpec])
 
   private def producers(id: Int) =
     create { b ⇒
@@ -64,14 +64,16 @@ class IntegrationMongoCleanUpSpec extends Specification {
       b.q("article" $gt 2 $lt 40)
       b.collection(PRODUCT)
       b.db(TEST_DB)
+      b.readPreference(ReadPreference.Nearest)
+      b.limit(5)
     }.column[Int]("article")
 
-    val p = for {
+    val program = for {
       dbObject ← Resource through products.out
       _ ← dbObject to sink
     } yield ()
 
-    p.run.run
+    program.runLog.run
     buffer must be equalTo ArrayBuffer(3, 35)
   }
 
@@ -88,7 +90,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
       _ ← dbObject.fold1 { _ + "-" + _ } to sink
     } yield ()
 
-    p.run.run
+    p.runLog.run
     buffer(0) must be equalTo "35-3"
   }
 
@@ -105,7 +107,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
       _ ← dbObject to sink
     } yield ()
 
-    p.run.run
+    p.runLog.run
     buffer(0) must be equalTo "Extra Large Wheel Barrow"
   }
 
@@ -124,7 +126,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
       _ ← dbObject to sink
     } yield ()
 
-    p.run.run
+    p.runLog.run
     buffer must be equalTo ArrayBuffer("Puma", "Reebok")
   }
 
@@ -144,7 +146,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
       } to sink
     } yield ()
 
-    p.run.run
+    p.runLog.run
     buffer(0) must be equalTo
       "Extra Large Wheel Barrow - Rubberized Work Glove/Extra Large Wheel Barrow - Gardening Tools/Extra Large Wheel Barrow - Car Tools"
   }
@@ -165,7 +167,7 @@ class IntegrationMongoCleanUpSpec extends Specification {
       _ ← dbObject.foldMap(_ + ", ") to sink
     } yield ()
 
-    p.run.run
+    p.runLog.run
     logger.debug(buffer(0))
     buffer(0) must be equalTo "Rubberized Work Glove, Gardening Tools, Car Tools, Gardening Tools, Car1 Tools, "
   }

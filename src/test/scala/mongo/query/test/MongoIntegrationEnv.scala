@@ -126,7 +126,7 @@ object MongoIntegrationEnv {
     scalaz.stream.io.resource(Task.delay(prepareMockMongo()))(rs ⇒ Task.delay {
       rs._1.close()
       rs._2.shutdownNow()
-      logger.debug(s"mongo-client ${rs._1.##} has been closed")
+      logger.debug(s"MongoClient ${rs._1.##} has been closed. Db ${rs._2.##} has been halted")
     }) { rs ⇒
       var obtained = false
       Task.fork(
@@ -145,43 +145,34 @@ object MongoIntegrationEnv {
   /**
    * used in test cases
    */
-  implicit object TestCaseFactory extends DBChannelFactory[DB] {
+  implicit object defaultDbChannel extends DBChannelFactory[DB] {
     override def createChannel(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[DB, DBObject] = {
-      arg match {
-        case \/-(setting) ⇒
-          query.DBChannel {
-            eval(Task.now { db: DB ⇒
-              Task {
-                scalaz.stream.io.resource(
-                  Task delay {
-                    val collection = db.getCollection(setting.cName)
-                    var cursor = collection.find(setting.q)
-                    cursor = setting.readPref.fold(cursor) { p ⇒ cursor.setReadPreference(p.asMongoDbReadPreference) }
-                    setting.sortQuery.foreach(cursor.sort)
-                    setting.skip.foreach(cursor.skip)
-                    setting.limit.foreach(cursor.limit)
-                    setting.maxTimeMS.foreach(cursor.maxTime(_, TimeUnit.MILLISECONDS))
-                    val rpLine = setting.readPref.fold("Empty") { p ⇒ p.asMongoDbReadPreference.toString }
-                    logger.debug(s"Cursor:${cursor.##} ReadPref:[$rpLine}] Server:[${cursor.getServerAddress}] Sort:[${setting.sortQuery}] Skip:[${setting.skip}] Query:[${setting.q}]")
-                    cursor
-                  })(cursor ⇒ Task.delay(cursor.close())) { c ⇒
-                    Task.delay {
-                      if (c.hasNext) {
-                        Thread.sleep(200) //for test
-                        val r = c.next
-                        logger.debug(r)
-                        r
-                      } else {
-                        logger.debug(s"Cursor: ${c.##} is exhausted")
-                        throw Cause.Terminated(Cause.End)
-                      }
-                    }
-                  }
-              }(pool)
-            })
-          }
-        case -\/(error) ⇒ query.DBChannel(eval(Task.fail(new MongoException(error))))
-      }
+      arg.fold({ error ⇒ DBChannel(eval(Task.fail(new MongoException(error)))) }, { setting ⇒
+        DBChannel(eval(Task.now { db: DB ⇒
+          Task {
+            val logger = Logger.getLogger("mongo-db-channel")
+            scalaz.stream.io.resource(
+              Task.delay {
+                val collection = db.getCollection(setting.cName)
+                val cursor = collection.find(setting.q)
+                scalaz.syntax.id.ToIdOpsDeprecated(cursor) |> { c ⇒
+                  setting.readPref.fold(c)(p ⇒ c.setReadPreference(p.asMongoDbReadPreference))
+                  setting.sortQuery.foreach(c.sort)
+                  setting.skip.foreach(c.skip)
+                  setting.limit.foreach(c.limit)
+                  setting.maxTimeMS.foreach(c.maxTime(_, TimeUnit.MILLISECONDS))
+                }
+                logger.debug(s"Query:[${setting.q}] ReadPrefs:[${cursor.getReadPreference}] Server:[${cursor.getServerAddress}] Sort:[${setting.sortQuery}] Limit:[${setting.limit}] Skip:[${setting.skip}]")
+                cursor
+              })(c ⇒ Task.delay(c.close())) { c ⇒
+                Task.delay {
+                  if (c.hasNext) c.next
+                  else throw Cause.Terminated(Cause.End) //Process.halt
+                }
+              }
+          }(pool)
+        }))
+      })
     }
   }
 }
