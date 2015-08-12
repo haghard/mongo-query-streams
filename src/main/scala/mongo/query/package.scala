@@ -256,8 +256,7 @@ package object query {
             val logger = Logger.getLogger("mongo-channel")
             scalaz.stream.io.resource(
               Task delay {
-                val collection = client.getDB(qs.db).getCollection(qs.cName)
-                val cursor = collection.find(qs.q)
+                val cursor = client.getDB(qs.db).getCollection(qs.cName).find(qs.q)
                 scalaz.syntax.id.ToIdOpsDeprecated(cursor) |> { c ⇒
                   qs.readPref.fold(c)(p ⇒ c.setReadPreference(p.asMongoDbReadPreference))
                   qs.sortQuery.foreach(c.sort)

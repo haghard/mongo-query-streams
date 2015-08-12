@@ -143,7 +143,7 @@ object MongoIntegrationEnv {
   }
 
   /**
-   * used in test cases
+   * used in [[IntegrationMongoDBSpec]]]
    */
   implicit object defaultDbChannel extends DBChannelFactory[DB] {
     override def createChannel(arg: String \/ QuerySetting)(implicit pool: ExecutorService): DBChannel[DB, DBObject] = {
@@ -153,8 +153,7 @@ object MongoIntegrationEnv {
             val logger = Logger.getLogger("mongo-db-channel")
             scalaz.stream.io.resource(
               Task.delay {
-                val collection = db.getCollection(setting.cName)
-                val cursor = collection.find(setting.q)
+                val cursor = db.getCollection(setting.cName).find(setting.q)
                 scalaz.syntax.id.ToIdOpsDeprecated(cursor) |> { c ⇒
                   setting.readPref.fold(c)(p ⇒ c.setReadPreference(p.asMongoDbReadPreference))
                   setting.sortQuery.foreach(c.sort)
