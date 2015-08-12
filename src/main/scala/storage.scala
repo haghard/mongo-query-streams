@@ -49,30 +49,13 @@ package object storage {
     def subscriber: Subscriber[E]
     def cursor: Option[T#Cursor]
 
-    @tailrec private def go(n: Long): Unit = {
-      log.info(s"request $n")
-      if (n > 0) {
-        if (cursor.exists(_.hasNext())) {
-          subscriber.onNext(extract(cursor.get))
-          go(n - 1)
-        } else subscriber.onCompleted()
-      }
-    }
     protected def extract(c: T#Cursor): E = {
       val r = c.next().asInstanceOf[E]
       log.info(s"fetch $r")
       r
     }
 
-    def fetch(n: Long): Unit = go(n)
-  }
-
-  private class QueryProducer[T <: StorageModule, E](
-      val interpreter: QueryInterpreter[T], val subscriber: Subscriber[E],
-      val resource: String, val collection: String, val q: QFree[T#ReadSettings],
-      val c: T#Client, val log: Logger) extends Producer {
-    self: Fetcher[T, E] ⇒
-    override def request(n: Long) = fetch(n)
+    def producer(): Long ⇒ Unit
   }
 
   trait QueryInterpreter[T <: StorageModule] {
@@ -173,15 +156,13 @@ package object storage {
         lazy val cursor: Option[MongoObservable#Cursor] = (Try {
           Option {
             val qs = interpreter.interpret(q)
-            val coll = c.getDB(resource).getCollection(collection)
-            val cursor = coll.find(qs.q)
+            val cursor = c.getDB(resource).getCollection(collection).find(qs.q)
             cursor |> { c ⇒
               qs.sort.foreach(c.sort)
               qs.skip.foreach(c.skip)
               qs.limit.foreach(c.limit)
             }
-
-            log.debug(s"Query-settings: Sort:[ ${qs.sort} ] Skip:[ ${qs.skip} ] Limit:[ ${qs.limit} ] Query:[ ${qs.q} ]")
+            log.debug(s"Query-settings: Sort:[${qs.sort}] Skip:[${qs.skip}] Limit:[${qs.limit}] Query:[${qs.q}]")
             cursor
           }
         } recover {
@@ -189,16 +170,35 @@ package object storage {
             subscriber.onError(e)
             None
         }).get
+
+        override def producer(): (Long) ⇒ Unit =
+          n ⇒ go(n)
+
+        @tailrec private def go(n: Long): Unit = {
+          log.info(s"request $n")
+          if (n > 0) {
+            if (cursor.exists(_.hasNext())) {
+              subscriber.onNext(extract(cursor.get))
+              go(n - 1)
+            } else subscriber.onCompleted()
+          }
+        }
       }
 
-      private def mongo[A](q: QFree[MongoReadSettings], c: String, resource: String,
-                           log: Logger, client: MongoObservable#Client, exec: ExecutorService): Observable[A] = {
-        Observable { subscriber: Subscriber[A] ⇒
-          subscriber.setProducer(new QueryProducer[MongoObservable, A](
-            implicitly[QueryInterpreter[MongoObservable]],
-            subscriber, resource, c, q, client, log) with MongoFetcher[A])
+      private def mongo[A](q0: QFree[MongoReadSettings], col: String, resource0: String,
+                           log0: Logger, client: MongoObservable#Client, exec: ExecutorService) =
+        Observable { subscriber0: Subscriber[A] ⇒
+          subscriber0.setProducer(
+            new MongoFetcher[A] {
+              override def subscriber = subscriber0
+              override def q: QFree[MongoReadSettings] = q0
+              override def log = log0
+              override def resource = resource0
+              override def collection = col
+              override def c = client
+              override def interpreter = implicitly[QueryInterpreter[MongoObservable]]
+            }.producer)
         }.subscribeOn(scheduler(exec))
-      }
 
       override def outerR(q: QFree[MongoObservable#ReadSettings], c: String, resource: String,
                           log: Logger, exec: ExecutorService): (MongoClient) ⇒ Observable[DBObject] = {
@@ -253,6 +253,7 @@ package object storage {
 
     implicit object CassandraStorageObservable extends Storage[CassandraObservable] {
       private trait CassandraFetcher[E] extends Fetcher[CassandraObservable, E] {
+        private val defaultPageSize = 8
         lazy val cursor: Option[CassandraObservable#Cursor] = (Try {
           Option {
             val qs = interpreter.interpret(q)
@@ -268,15 +269,37 @@ package object storage {
             subscriber.onError(e)
             None
         }).get
+
+        @tailrec private def fetch(n: Int, i: Int, c: CassandraObservable#Cursor): Unit = {
+          if (i < n && c.hasNext && !subscriber.isUnsubscribed) {
+            val r = extract(c)
+            subscriber.onNext(r)
+            fetch(n, i + 1, c)
+          }
+        }
+
+        override def producer: (Long) ⇒ Unit =
+          n ⇒ {
+            val intN = if (n >= defaultPageSize) defaultPageSize else n.toInt
+            if (cursor.isDefined) {
+              if (cursor.get.hasNext) fetch(intN, 0, cursor.get)
+              else subscriber.onCompleted()
+            }
+          }
       }
 
-      private def cassandra[A](q: QFree[CassandraReadSettings], client: CassandraObservable#Client,
-                               c: String, resource: String, log: Logger, exec: ExecutorService): Observable[A] = {
-        Observable { subscriber: Subscriber[A] ⇒
-          subscriber.setProducer(new QueryProducer[CassandraObservable, A](
-            implicitly[QueryInterpreter[CassandraObservable]],
-            subscriber, resource,
-            c, q, client, log) with CassandraFetcher[A])
+      private def cassandra[A](q0: QFree[CassandraReadSettings], client0: CassandraObservable#Client,
+                               c0: String, resource0: String, log0: Logger, exec: ExecutorService): Observable[A] = {
+        Observable { subscriber0: Subscriber[A] ⇒
+          subscriber0.setProducer(new CassandraFetcher[A] {
+            override def subscriber = subscriber0
+            override def q = q0
+            override def log = log0
+            override def resource = resource0
+            override def collection = c0
+            override def c = client0
+            override def interpreter = implicitly[QueryInterpreter[CassandraObservable]]
+          }.producer)
         }.subscribeOn(scheduler(exec))
       }
 

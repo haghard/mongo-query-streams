@@ -177,7 +177,7 @@ Here's a example of how you can do joinByPk between collections `LANGS` and `PRO
   
   implicit val exec = newFixedThreadPool(2, new NamedThreadFactory("db-worker"))
   implicit val c = client
-  val joiner = Join[MongoProcessStream]
+  val joiner = Join[MongoProcess]
       
   val query = joiner.joinByPk(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
     s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"
@@ -217,7 +217,7 @@ Join using `rx.lang.scala.Observable`
   
   implicit val exec = newFixedThreadPool(2, new NamedThreadFactory("db-worker"))
   implicit val c = client
-  val joiner = Join[MongoObservableStream]
+  val joiner = Join[MongoObservable]
   
   val query = joiner.joinByPk(qLang, LANGS, "index", qProg(_: Int), PROGRAMMERS, TEST_DB) { (l, r: DBObject) ⇒
     s"Primary-key:$l - val:[Foreign-key:${r.get("lang")} - ${r.get("name")}]"

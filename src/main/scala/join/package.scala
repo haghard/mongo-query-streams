@@ -47,16 +47,18 @@ package object join {
                 rightQ: T#Record ⇒ QFree[T#ReadSettings], rCollection: String,
                 resource: String)(f: (T#Record, T#Record) ⇒ A): T#Stream[A] = {
 
-      val joiner = Joiner[T]
       val storage = Storage[T]
+      val outer = storage.outerR(leftQ, lCollection, resource, logger, pool)(client)
+      val relation = storage.innerR(rightQ, rCollection, resource, logger, pool)(client)
 
-      val left = storage.outerR(leftQ, lCollection, resource, logger, pool)(client)
-      val right = storage.innerR(rightQ, rCollection, resource, logger, pool)(client)
-
-      joiner.join[T#Record, T#Record, A](left)(right)(f)
+      Joiner[T].join[T#Record, T#Record, A](outer)(relation)(f)
     }
   }
 
+  /**
+   *
+   * @tparam T
+   */
   private[join] trait Joiner[T <: StorageModule] {
     def join[A, B, C](l: T#Stream[A])(relation: A ⇒ T#Stream[B])(f: (A, B) ⇒ C): T#Stream[C]
   }
@@ -67,23 +69,23 @@ package object join {
     import join.cassandra.{ CassandraObservable, CassandraProcess }
 
     implicit object MongoP extends Joiner[MongoProcess] {
-      def join[A, B, C](l: MongoProcess#Stream[A])(relation: A ⇒ MongoProcess#Stream[B])(f: (A, B) ⇒ C): MongoProcess#Stream[C] =
-        for { id ← l; rs ← relation(id) |> scalaz.stream.process1.lift(f(id, _)) } yield rs
+      def join[A, B, C](outer: MongoProcess#Stream[A])(relation: A ⇒ MongoProcess#Stream[B])(f: (A, B) ⇒ C): MongoProcess#Stream[C] =
+        for { id ← outer; rs ← relation(id) |> scalaz.stream.process1.lift(f(id, _)) } yield rs
     }
 
     implicit object MongoO extends Joiner[MongoObservable] {
-      override def join[A, B, C](l: MongoObservable#Stream[A])(relation: A ⇒ MongoObservable#Stream[B])(f: (A, B) ⇒ C): MongoObservable#Stream[C] =
-        for { id ← l; rs ← relation(id).map(f(id, _)) } yield rs
+      override def join[A, B, C](outer: MongoObservable#Stream[A])(relation: A ⇒ MongoObservable#Stream[B])(f: (A, B) ⇒ C): MongoObservable#Stream[C] =
+        for { id ← outer; rs ← relation(id).map(f(id, _)) } yield rs
     }
 
     implicit object CassandraP extends Joiner[CassandraProcess] {
-      override def join[A, B, C](l: CassandraProcess#Stream[A])(relation: A ⇒ CassandraProcess#Stream[B])(f: (A, B) ⇒ C): CassandraProcess#Stream[C] =
-        for { id ← l; rs ← relation(id) |> scalaz.stream.process1.lift(f(id, _)) } yield rs
+      override def join[A, B, C](outer: CassandraProcess#Stream[A])(relation: A ⇒ CassandraProcess#Stream[B])(f: (A, B) ⇒ C): CassandraProcess#Stream[C] =
+        for { id ← outer; rs ← relation(id) |> scalaz.stream.process1.lift(f(id, _)) } yield rs
     }
 
     implicit object CassandraO extends Joiner[CassandraObservable] {
-      override def join[A, B, C](l: Observable[A])(relation: (A) ⇒ Observable[B])(f: (A, B) ⇒ C): Observable[C] =
-        for { id ← l; rs ← relation(id).map(f(id, _)) } yield rs
+      override def join[A, B, C](outer: Observable[A])(relation: (A) ⇒ Observable[B])(f: (A, B) ⇒ C): Observable[C] =
+        for { id ← outer; rs ← relation(id).map(f(id, _)) } yield rs
     }
 
     def apply[T <: StorageModule: Joiner]: Joiner[T] = implicitly[Joiner[T]]
