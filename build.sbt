@@ -6,7 +6,7 @@ organization := "org.mongo.scalaz"
 
 name := "mongo-query-streams"
 
-version := "0.6.8"
+version := "0.6.9"
 
 scalaVersion := "2.11.7"
 
@@ -32,7 +32,7 @@ scalacOptions ++= Seq(
 )
 
 val MongoDriverVersion = "3.0.2"
-val ScalazStreamVersion = "0.7.2a"
+val ScalazStreamVersion = "0.7.3a"//"0.8"
 val RxScala = "0.25.0"
 val localMvnRepo = "/Volumes/Data/dev_build_tools/apache-maven-3.1.1/repository"
 
@@ -52,15 +52,15 @@ resolvers ++= Seq(
 )
 
 libraryDependencies ++= Seq(
-    "org.mongodb"       %   "mongo-java-driver"           %   MongoDriverVersion  withSources(),
+    "org.mongodb"       %   "mongo-java-driver" %   MongoDriverVersion  withSources(),
     "org.scalaz.stream" %%  "scalaz-stream"     %   ScalazStreamVersion withSources(),
     "io.reactivex"      %%  "rxscala"           %   RxScala             withSources(),
     "com.chuusai"       %%  "shapeless"         %   "2.2.3",
     "log4j"             %   "log4j"             %   "1.2.14")
 
 libraryDependencies ++= Seq(
-  "de.bwaldvogel"   %   "mongo-java-server" %   "1.4.1"   % "test" withSources(),
-  "org.specs2"      %%  "specs2-core"       %   "3.2"     % "test" withSources(),
+  "de.bwaldvogel"   %   "mongo-java-server" %   "1.4.4"   % "test" withSources(),
+  "org.specs2"      %%  "specs2-core"       %   "3.6.4"   % "test" withSources(),
   "oncue.ermine"    %%  "ermine-parser"     %   "0.2.1-2" % "test" withSources()
 )
 

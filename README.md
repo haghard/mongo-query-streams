@@ -252,4 +252,4 @@ Generated files can be found in /target/spec2-reports
 
 Status
 ------
-0.6.8 version
+0.6.9 version

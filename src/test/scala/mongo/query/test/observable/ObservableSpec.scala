@@ -68,7 +68,7 @@ class ObservableSpec extends Specification {
 
   "One to many join through stream with fixed columns" in new MongoStreamsEnviroment {
     initMongo()
-    
+
     val buffer = mutable.Buffer.empty[String]
     val Sink = io.fillBuffer(buffer)
     implicit val cl = client
@@ -106,7 +106,7 @@ class ObservableSpec extends Specification {
 
   "One to many join through stream with raw objects" in new MongoStreamsEnviroment {
     initMongo()
-    
+
     val buffer = mutable.Buffer.empty[String]
     val Sink = io.fillBuffer(buffer)
     implicit val cl = client
